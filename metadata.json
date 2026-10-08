@@ -1,0 +1,6 @@
+{
+  "name": "Multi-Agent Group Chat",
+  "description": "Headless multi-agent reasoning engine with event-sourced orchestration, provider adapters, context management, and interactive steering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
