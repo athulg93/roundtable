@@ -1,5 +1,5 @@
 /**
- * Multi-Agent Group Chat - Core Domain Types (Phase 1 MVP)
+ * Roundtable Core Domain Types (Phase 1 MVP + Phase 2 Reasoning Engine)
  */
 
 export type ConversationState = 'idle' | 'running' | 'paused' | 'waiting_for_user' | 'ended';
@@ -20,7 +20,7 @@ export interface Agent {
   id: string;
   name: string;
   role: AgentRole;
-  provider: string; // 'mock' | 'openai-compatible' | 'anthropic' | 'gemini'
+  provider: string; // 'mock' | 'openai-compatible' | 'anthropic' | 'gemini' | custom
   model: string;
   rolePrompt?: string; // system prompt defining expertise & perspective (optional)
   temperature: number;
@@ -29,6 +29,7 @@ export interface Agent {
   timeoutSettings: TimeoutSettings;
   visualIdentity: VisualIdentity;
   modelMetadata?: Record<string, unknown>;
+  createdAt?: number;
 }
 
 export type SpeakerSelectionPolicy = 'manual' | 'round-robin' | 'moderator-directed';
@@ -42,6 +43,9 @@ export interface Group {
   moderatorId: string;
   speakerPolicy: SpeakerSelectionPolicy;
   terminationPolicy: TerminationPolicy;
+  protocol?: DeliberationProtocol;
+  tierScheduling?: boolean;
+  contextBudget?: number;
   maxRounds?: number;
   maxTokens?: number;
   turnTimeoutMs?: number;
@@ -84,9 +88,11 @@ export interface Turn {
   conversationId: string;
   speakerId: string;
   speakerName: string;
-  role: 'agent' | 'user' | 'moderator';
+  role: 'agent' | 'user' | 'moderator' | 'participant';
   selectedModel: string;
   selectedProvider: string;
+  model?: string;
+  provider?: string;
   status: TurnStatus;
   content: string;
   rawPrompt?: string;
@@ -95,6 +101,7 @@ export interface Turn {
   recoveryAction?: RecoveryAction;
   startedAt: number;
   completedAt?: number;
+  createdAt?: number;
   effectiveConfig?: Record<string, unknown>;
 }
 
@@ -123,7 +130,52 @@ export interface ConversationSummaries {
   renderedMarkdown?: string;
 }
 
-// Durable Event Model (Schema Version 1)
+// --- Phase 2: Shared Blackboard ---
+export interface BlackboardItem {
+  id: string;
+  category: 'decision' | 'hypothesis' | 'assumption' | 'open_question';
+  text: string;
+  authorId: string;
+  authorName: string;
+  status: 'active' | 'resolved' | 'rejected';
+  resolvedReason?: string;
+  timestamp: number;
+}
+
+export interface BlackboardState {
+  items: Record<string, BlackboardItem>;
+  updatedAt: number;
+}
+
+// --- Phase 2: Dissent Log ---
+export interface DissentItem {
+  id: string;
+  agentId: string;
+  agentName: string;
+  topic: string;
+  objection: string;
+  timestamp: number;
+}
+
+// --- Phase 2: Branching ---
+export interface BranchNode {
+  conversationId: string;
+  branchName: string;
+  parentConversationId?: string;
+  forkSequence?: number;
+  forkTurnId?: string;
+  createdAt: number;
+}
+
+// --- Phase 2: Protocols ---
+export type DeliberationProtocol =
+  | 'standard'
+  | 'blind-first'
+  | 'debate'
+  | 'red-team'
+  | 'pre-mortem';
+
+// Durable Event Model (Schema Version 2)
 export type ConversationEventType =
   | 'conversation.created'
   | 'user.message'
@@ -132,6 +184,12 @@ export type ConversationEventType =
   | 'turn.failed'
   | 'turn.skipped'
   | 'summary.created'
+  | 'blackboard.item_added'
+  | 'blackboard.item_resolved'
+  | 'blind_round.completed'
+  | 'conversation.forked'
+  | 'dissent.logged'
+  | 'stall.detected'
   | 'conversation.ended';
 
 export interface BaseEvent {
@@ -139,7 +197,7 @@ export interface BaseEvent {
   conversationId: string;
   sequence: number;
   timestamp: number;
-  schemaVersion: 1;
+  schemaVersion: number;
 }
 
 export interface ConversationCreatedEvent extends BaseEvent {
@@ -147,6 +205,8 @@ export interface ConversationCreatedEvent extends BaseEvent {
   payload: {
     group: Group;
     agents: Record<string, Agent>;
+    protocol?: DeliberationProtocol;
+    branchName?: string;
   };
 }
 
@@ -165,7 +225,7 @@ export interface TurnStartedEvent extends BaseEvent {
     turnId: string;
     speakerId: string;
     speakerName: string;
-    role: 'agent' | 'moderator';
+    role: AgentRole | 'agent';
     model: string;
     provider: string;
     effectiveConfig: {
@@ -182,7 +242,7 @@ export interface TurnCompletedEvent extends BaseEvent {
     turnId: string;
     speakerId: string;
     content: string;
-    usage: Usage;
+    usage?: Usage;
   };
 }
 
@@ -192,7 +252,7 @@ export interface TurnFailedEvent extends BaseEvent {
     turnId: string;
     speakerId: string;
     error: NormalizedProviderError;
-    recoveryAction: RecoveryAction;
+    recoveryAction: 'retry' | 'skip' | 'pause';
   };
 }
 
@@ -214,6 +274,56 @@ export interface SummaryCreatedEvent extends BaseEvent {
   };
 }
 
+export interface BlackboardItemAddedEvent extends BaseEvent {
+  type: 'blackboard.item_added';
+  payload: {
+    item: BlackboardItem;
+  };
+}
+
+export interface BlackboardItemResolvedEvent extends BaseEvent {
+  type: 'blackboard.item_resolved';
+  payload: {
+    itemId: string;
+    status: 'resolved' | 'rejected';
+    reason?: string;
+  };
+}
+
+export interface BlindRoundCompletedEvent extends BaseEvent {
+  type: 'blind_round.completed';
+  payload: {
+    roundNumber: number;
+    stances: Record<string, { content: string; speakerName: string; usage?: Usage }>;
+  };
+}
+
+export interface ConversationForkedEvent extends BaseEvent {
+  type: 'conversation.forked';
+  payload: {
+    parentConversationId: string;
+    forkTurnSequence: number;
+    forkTurnId?: string;
+    newBranchName: string;
+  };
+}
+
+export interface DissentLoggedEvent extends BaseEvent {
+  type: 'dissent.logged';
+  payload: {
+    dissent: DissentItem;
+  };
+}
+
+export interface StallDetectedEvent extends BaseEvent {
+  type: 'stall.detected';
+  payload: {
+    roundNumber: number;
+    reason: string;
+    suggestedIntervention: string;
+  };
+}
+
 export interface ConversationEndedEvent extends BaseEvent {
   type: 'conversation.ended';
   payload: {
@@ -230,6 +340,12 @@ export type ConversationEvent =
   | TurnFailedEvent
   | TurnSkippedEvent
   | SummaryCreatedEvent
+  | BlackboardItemAddedEvent
+  | BlackboardItemResolvedEvent
+  | BlindRoundCompletedEvent
+  | ConversationForkedEvent
+  | DissentLoggedEvent
+  | StallDetectedEvent
   | ConversationEndedEvent;
 
 export interface Conversation {
@@ -251,6 +367,12 @@ export interface Conversation {
   events: ConversationEvent[];
   turns: Turn[];
   summaries: ConversationSummaries;
+  totalTokens?: number;
+  blackboard: BlackboardState;
+  dissentLog: DissentItem[];
+  branch: BranchNode;
+  protocol: DeliberationProtocol;
+  blindRoundStances?: Record<string, { content: string; speakerName: string }>;
   terminationReason?: string;
   createdAt: number;
   updatedAt: number;
@@ -260,12 +382,18 @@ export interface ModeratorDecision {
   nextSpeaker?: string;
   concluded: boolean;
   reason: string;
+  suggestedBlackboardItem?: {
+    category: 'decision' | 'hypothesis' | 'assumption' | 'open_question';
+    text: string;
+  };
 }
 
 export interface RunOptions {
   speakerPolicy?: SpeakerSelectionPolicy;
   terminationPolicy?: TerminationPolicy;
+  protocol?: DeliberationProtocol;
   maxRounds?: number;
   maxTokens?: number;
   hardTurnLimit?: number; // Safety ceiling, default 50
+  tierScheduling?: boolean; // Hybrid local/frontier model scheduling
 }

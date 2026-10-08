@@ -16,6 +16,8 @@ import {
   Activity,
   Layers,
   Zap,
+  GitBranch,
+  EyeOff,
 } from 'lucide-react';
 
 export interface TurnControlsProps {
@@ -31,6 +33,8 @@ export interface TurnControlsProps {
   onStop: () => void;
   onInterject: (text: string) => void;
   onSummarize: () => void;
+  onBlindRound?: () => void;
+  onForkBranch?: () => void;
 }
 
 export const TurnControls: React.FC<TurnControlsProps> = ({
@@ -46,6 +50,8 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
   onStop,
   onInterject,
   onSummarize,
+  onBlindRound,
+  onForkBranch,
 }) => {
   const [interjectText, setInterjectText] = useState('');
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('');
@@ -179,6 +185,28 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
           >
             <Square className="w-3.5 h-3.5 fill-current" />
             Stop / Abort
+          </button>
+        )}
+
+        {!isRunning && !isEnded && onBlindRound && (
+          <button
+            onClick={onBlindRound}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-950 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300 font-semibold text-xs transition-colors shadow-sm"
+            title="Execute parallel blind stances with epistemic isolation"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            Blind Round
+          </button>
+        )}
+
+        {!isRunning && !isEnded && onForkBranch && (
+          <button
+            onClick={onForkBranch}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-xs transition-colors shadow-sm"
+            title="Fork this deliberation session for what-if exploration"
+          >
+            <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+            Fork Branch
           </button>
         )}
 

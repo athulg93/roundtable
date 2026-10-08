@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Agent, Group, SpeakerSelectionPolicy, TerminationPolicy } from '../core/types.ts';
+import { Agent, Group, SpeakerSelectionPolicy, TerminationPolicy, DeliberationProtocol } from '../core/types.ts';
 import {
   SupportedProviderType,
   PROVIDER_PRESETS,
@@ -155,6 +155,8 @@ const INITIAL_CONNECTIONS: Record<string, AgentConnectionState> = {
 export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [groupName, setGroupName] = useState('Core Architecture Working Group');
   const [goal, setGoal] = useState(PRESET_TOPICS[0].goal);
+  const [protocol, setProtocol] = useState<DeliberationProtocol>('blind-first');
+  const [tierScheduling, setTierScheduling] = useState(true);
   const [speakerPolicy, setSpeakerPolicy] = useState<SpeakerSelectionPolicy>('moderator-directed');
   const [terminationPolicy, setTerminationPolicy] = useState<TerminationPolicy>('moderator-conclusion');
   const [maxRounds, setMaxRounds] = useState(5);
@@ -344,6 +346,8 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       moderatorId,
       speakerPolicy,
       terminationPolicy,
+      protocol,
+      tierScheduling,
       maxRounds,
       maxTokens,
       turnTimeoutMs: 30000,
@@ -447,6 +451,100 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 leading-relaxed"
               required
             />
+          </div>
+
+          {/* Phase 2: Deliberation Protocol Presets */}
+          <div className="space-y-2 pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-300">
+                Deliberation Protocol Preset
+              </label>
+              <span className="text-[11px] text-cyan-400 font-mono">
+                {protocol === 'blind-first' && 'Epistemic Isolation Mode'}
+                {protocol === 'debate' && 'Dialectical Affirmative/Negative'}
+                {protocol === 'red-team' && 'Adversarial Threat Modeling'}
+                {protocol === 'pre-mortem' && 'Counterfactual Failure Analysis'}
+                {protocol === 'standard' && 'Open Collaborative Debate'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {[
+                {
+                  id: 'blind-first',
+                  title: 'Blind-First Delphi',
+                  tag: 'Epistemic Independence',
+                  desc: 'All participants generate independent stances in parallel before group cross-examination to eliminate anchoring.',
+                  badge: 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300',
+                },
+                {
+                  id: 'debate',
+                  title: 'Formal Debate',
+                  tag: 'Strict Dialectic',
+                  desc: 'Structured rounds: Affirmative constructive -> Negative rebuttal -> Affirmative defense -> Closing verdict.',
+                  badge: 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300',
+                },
+                {
+                  id: 'red-team',
+                  title: 'Adversarial Red-Team',
+                  tag: 'Security & Robustness',
+                  desc: 'Architecture proposal -> Red-team exploit vectors -> Blue-team hardening -> Security arbiter sign-off.',
+                  badge: 'bg-red-950/60 border-red-700/60 text-red-300',
+                },
+                {
+                  id: 'pre-mortem',
+                  title: 'Pre-Mortem Analysis',
+                  tag: 'Failure Prevention',
+                  desc: 'Assume failure 6 months out -> Root cause inquest -> Actionable preventive failsafes on blackboard.',
+                  badge: 'bg-amber-950/60 border-amber-700/60 text-amber-300',
+                },
+                {
+                  id: 'standard',
+                  title: 'Standard Deliberation',
+                  tag: 'Open Dynamic Flow',
+                  desc: 'Open multi-turn collaboration guided by moderator speaker selection and working memory blackboard.',
+                  badge: 'bg-slate-900 border-slate-700 text-slate-300',
+                },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProtocol(p.id as DeliberationProtocol)}
+                  className={`text-left p-2.5 rounded-xl border transition ${
+                    protocol === p.id
+                      ? 'border-cyan-500 bg-cyan-950/30 ring-1 ring-cyan-500/40'
+                      : 'border-slate-800/80 bg-slate-950/60 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-slate-200">{p.title}</span>
+                    <span className={`px-1.5 py-0.5 text-[9px] font-mono rounded border ${p.badge}`}>
+                      {p.tag}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">{p.desc}</p>
+                </button>
+              ))}
+            </div>
+
+            {/* Hybrid Tiered Scheduling toggle */}
+            <div className="mt-2 p-3 rounded-lg border border-slate-800 bg-slate-950/50 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-medium text-slate-300">Hybrid Tiered Model Scheduling</span>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Dispatches fast/local models (Ollama, LM Studio) for brainstorming turns, while reserving frontier models (Claude, Gemini 2.5 Pro) for arbitration and blackboard synthesis.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  checked={tierScheduling}
+                  onChange={(e) => setTierScheduling(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+              </label>
+            </div>
           </div>
 
           {/* Orchestration Policies */}

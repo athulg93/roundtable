@@ -7,3 +7,6 @@ export * from './SummaryView.tsx';
 export * from './EventLogView.tsx';
 export * from './TestHarness.tsx';
 export * from './DeveloperGuideModal.tsx';
+export * from './BlackboardView.tsx';
+export * from './BranchTreeVisualizer.tsx';
+export * from './DissentLogView.tsx';

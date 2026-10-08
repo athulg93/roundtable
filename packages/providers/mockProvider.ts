@@ -47,6 +47,13 @@ export class MockProvider implements ProviderAdapter {
     this.config = { ...this.config, ...newConfig };
   }
 
+  registerScript(key: string, response: string): void {
+    if (!this.config.scriptedResponses) {
+      this.config.scriptedResponses = {};
+    }
+    this.config.scriptedResponses[key] = response;
+  }
+
   killServer(): void {
     this.isServerKilled = true;
   }

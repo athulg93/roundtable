@@ -37,6 +37,12 @@ import { ProviderRegistry, defaultProviderRegistry } from '../providers/registry
 import { normalizeError } from '../providers/errors.ts';
 import { StorageAdapter } from '../storage/types.ts';
 import { MemoryStorageAdapter } from '../storage/memoryStorage.ts';
+import { extractBlackboardItems, createBlackboardItem } from '../reasoning/blackboard.ts';
+import { extractDissentItems, createDissentItem, detectStall } from '../reasoning/stallAndDissent.ts';
+import { PROTOCOL_PRESETS } from '../reasoning/protocols.ts';
+import { forkConversation, BranchInfo } from '../reasoning/branching.ts';
+import { executeBlindRound as runBlindRound, BlindStance } from '../reasoning/blindDeliberation.ts';
+import { defaultTieredDispatcher } from '../reasoning/tieredDispatcher.ts';
 
 export type SessionEventListener = (event: any) => void;
 
@@ -303,6 +309,31 @@ export class GroupChatSession {
 
     let speakerId: string | undefined = manualSpeakerId;
     let moderatorNote = '';
+    let promptPrefix = '';
+    const protocol = options.protocol || group.protocol || this.state.protocol || 'standard';
+
+    if (!speakerId) {
+      if (protocol && protocol !== 'standard' && PROTOCOL_PRESETS[protocol]) {
+        const protoDef = PROTOCOL_PRESETS[protocol];
+        const protoRes = protoDef.determineNextSpeaker(this, participants);
+        if (protoRes.isConcluded) {
+          await this.appendEvent({
+            type: 'conversation.ended',
+            payload: {
+              reason: protoRes.conclusionReason || `Protocol ${protocol} concluded`,
+              finalTurnCount: this.state.totalTurns,
+            },
+          });
+          return null;
+        }
+        if (protoRes.speakerId) {
+          speakerId = protoRes.speakerId;
+        }
+        if (protoRes.promptPrefix) {
+          promptPrefix = protoRes.promptPrefix;
+        }
+      }
+    }
 
     if (!speakerId) {
       if (speakerPolicy === 'manual') {
@@ -348,6 +379,13 @@ export class GroupChatSession {
       agentContext = this.contextBuilder.build(agent, this.state);
     }
 
+    if (promptPrefix) {
+      agentContext.messages = [
+        { role: 'system', content: promptPrefix },
+        ...agentContext.messages,
+      ];
+    }
+
     // 3. Start Turn
     const turnId = 'turn-' + Math.random().toString(36).substring(2, 9);
     await this.appendEvent({
@@ -356,7 +394,7 @@ export class GroupChatSession {
         turnId,
         speakerId: agent.id,
         speakerName: agent.name,
-        role: agent.role === 'moderator' ? 'moderator' : 'agent',
+        role: agent.role === 'moderator' ? 'moderator' : 'participant',
         model: agent.model,
         provider: agent.provider,
         effectiveConfig: {
@@ -461,6 +499,43 @@ export class GroupChatSession {
           usage: finalUsage,
         },
       });
+
+      // Phase 2: Extract candidate blackboard items
+      const bbItems = extractBlackboardItems(accumulatedText, agent.id, agent.name);
+      for (const item of bbItems) {
+        await this.appendEvent({
+          type: 'blackboard.item_added',
+          payload: { item },
+        });
+      }
+
+      // Phase 2: Extract dissent items
+      const dissentItems = extractDissentItems(
+        accumulatedText,
+        this.state.groupSnapshot.goal,
+        agent.id,
+        agent.name
+      );
+      for (const dissent of dissentItems) {
+        await this.appendEvent({
+          type: 'dissent.logged',
+          payload: { dissent },
+        });
+      }
+
+      // Phase 2: Stall detection check
+      const stallCheck = detectStall(this.state);
+      if (stallCheck.stalled) {
+        await this.appendEvent({
+          type: 'stall.detected',
+          payload: {
+            roundNumber: this.state.roundCount,
+            reason: stallCheck.reason || 'Semantic repetition detected across turns',
+            suggestedIntervention:
+              stallCheck.suggestedIntervention || 'Moderator intervention recommended',
+          },
+        });
+      }
 
       this.consecutiveFailures = 0;
       return this.state.turns.find((t) => t.id === turnId) || null;
@@ -637,6 +712,74 @@ export class GroupChatSession {
         nextSteps: nextStepsRes.structured,
         detailed: detailedRes.structured,
       };
+    });
+  }
+
+  // --- Phase 2: Deliberation & Reasoning API ---
+
+  /**
+   * Executes a blind deliberation round in parallel across all participant agents.
+   */
+  async executeBlindRound(): Promise<Record<string, BlindStance>> {
+    return this.queue.execute(async () => {
+      return runBlindRound(this);
+    });
+  }
+
+  /**
+   * Forks the conversation at a specific turn or sequence for what-if exploration.
+   */
+  forkBranch(options: {
+    forkTurnId?: string;
+    forkSequence?: number;
+    newBranchName?: string;
+  }): GroupChatSession {
+    return forkConversation(this, options);
+  }
+
+  /**
+   * Adds an item to the shared working memory blackboard.
+   */
+  async addBlackboardItem(
+    category: 'decision' | 'hypothesis' | 'assumption' | 'open_question',
+    text: string,
+    authorId = 'user',
+    authorName = 'User'
+  ): Promise<void> {
+    const item = createBlackboardItem(category, text, authorId, authorName);
+    await this.appendEvent({
+      type: 'blackboard.item_added',
+      payload: { item },
+    });
+  }
+
+  /**
+   * Resolves or rejects an item on the shared blackboard.
+   */
+  async resolveBlackboardItem(
+    itemId: string,
+    status: 'resolved' | 'rejected',
+    reason?: string
+  ): Promise<void> {
+    await this.appendEvent({
+      type: 'blackboard.item_resolved',
+      payload: { itemId, status, reason },
+    });
+  }
+
+  /**
+   * Permanently archives a dissenting viewpoint in the immutable dissent log.
+   */
+  async logDissent(
+    objection: string,
+    topic = this.state.groupSnapshot.goal,
+    agentId = 'user',
+    agentName = 'User'
+  ): Promise<void> {
+    const dissent = createDissentItem(objection, topic, agentId, agentName);
+    await this.appendEvent({
+      type: 'dissent.logged',
+      payload: { dissent },
     });
   }
 }

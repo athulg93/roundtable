@@ -42,7 +42,11 @@ export function validateAgentBudget(agent: Agent): void {
 export class ContextBuilder {
   constructor(private tokenEstimator: TokenEstimator = defaultTokenEstimator) {}
 
-  build(agent: Agent, conversation: Conversation): AgentContext {
+  build(
+    agent: Agent,
+    conversation: Conversation,
+    options?: { blindMode?: boolean }
+  ): AgentContext {
     validateAgentBudget(agent);
 
     const group = conversation.groupSnapshot;
@@ -103,11 +107,36 @@ export class ContextBuilder {
       }
     }
 
+    // Phase 2: Inject Shared Working Memory Blackboard if present
+    if (conversation.blackboard && conversation.blackboard.items) {
+      const activeItems = Object.values(conversation.blackboard.items).filter((i) => i.status === 'active');
+      if (activeItems.length > 0) {
+        const decisions = activeItems.filter((i) => i.category === 'decision').map((i) => `  - ✅ [Decision]: ${i.text}`);
+        const hypotheses = activeItems.filter((i) => i.category === 'hypothesis').map((i) => `  - 💡 [Hypothesis]: ${i.text}`);
+        const assumptions = activeItems.filter((i) => i.category === 'assumption').map((i) => `  - ⚠️ [Assumption]: ${i.text}`);
+        const questions = activeItems.filter((i) => i.category === 'open_question').map((i) => `  - ❓ [Question]: ${i.text}`);
+
+        const blackboardText = [
+          `[Shared Working Memory Blackboard]:`,
+          decisions.length ? decisions.join('\n') : null,
+          hypotheses.length ? hypotheses.join('\n') : null,
+          assumptions.length ? assumptions.join('\n') : null,
+          questions.length ? questions.join('\n') : null,
+        ].filter(Boolean).join('\n');
+
+        const blackboardTokens = this.tokenEstimator.estimate(blackboardText);
+        if (remainingBudget > blackboardTokens) {
+          messages.push({ role: 'system', content: blackboardText });
+          remainingBudget -= blackboardTokens;
+        }
+      }
+    }
+
     // 4. Assemble Recent Turns (from newest to oldest until budget is exhausted)
     // Only completed turns and user messages
-    const validTurns = conversation.turns.filter(
-      (t) => t.status === 'completed' && t.content.trim().length > 0
-    );
+    const validTurns = options?.blindMode
+      ? [] // In blind mode, agent sees no prior peer turns from this round
+      : conversation.turns.filter((t) => t.status === 'completed' && t.content.trim().length > 0);
 
     const includedTurns: Turn[] = [];
     const excludedTurns: Turn[] = [];

@@ -1,6 +1,7 @@
 /**
- * GroupChat Component (P1.10)
- * Reusable React component embedding the complete Multi-Agent Group Chat system.
+ * GroupChat Component (Phase 1 MVP + Phase 2 Reasoning Engine)
+ * Two-pane deliberation cockpit with shared blackboard, interactive branch tree,
+ * dissent log, parallel blind deliberation, and event log replay.
  */
 
 import React, { useState } from 'react';
@@ -11,11 +12,23 @@ import { MessageList } from './MessageList.tsx';
 import { TurnControls } from './TurnControls.tsx';
 import { SummaryView } from './SummaryView.tsx';
 import { GroupSetup } from './GroupSetup.tsx';
+import { BlackboardView } from './BlackboardView.tsx';
+import { BranchTreeVisualizer } from './BranchTreeVisualizer.tsx';
+import { DissentLogView } from './DissentLogView.tsx';
 import { EventLogView } from './EventLogView.tsx';
 import { TestHarness } from './TestHarness.tsx';
 import { LocalStorageAdapter } from '../storage/localStorage.ts';
 import { defaultProviderRegistry } from '../providers/registry.ts';
-import { Layers, ShieldAlert, Settings, MessageSquare } from 'lucide-react';
+import {
+  Layers,
+  ShieldAlert,
+  Settings,
+  GitBranch,
+  ClipboardList,
+  Scale,
+  EyeOff,
+  Sparkles,
+} from 'lucide-react';
 
 export interface GroupChatProps {
   initialSession?: GroupChatSession;
@@ -24,7 +37,9 @@ export interface GroupChatProps {
 export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
   const [session, setSession] = useState<GroupChatSession | null>(initialSession || null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [activeBottomTab, setActiveBottomTab] = useState<'none' | 'events' | 'harness'>('harness');
+  const [activeRightTab, setActiveRightTab] = useState<
+    'blackboard' | 'branches' | 'dissent' | 'events' | 'harness'
+  >('blackboard');
   const [, setTick] = useState(0);
 
   const storage = new LocalStorageAdapter();
@@ -61,140 +76,286 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
     }
   };
 
+  const handleSwitchSession = (newSession: GroupChatSession) => {
+    setSession(newSession);
+  };
+
   if (!session) {
     return <GroupSetup onStartSession={handleCreateSession} />;
   }
 
   return (
-    <GroupChatInner
+    <GroupChatCockpit
       session={session}
       onReset={handleReset}
+      onSwitchSession={handleSwitchSession}
       showSummaryModal={showSummaryModal}
       setShowSummaryModal={setShowSummaryModal}
-      activeBottomTab={activeBottomTab}
-      setActiveBottomTab={setActiveBottomTab}
+      activeRightTab={activeRightTab}
+      setActiveRightTab={setActiveRightTab}
       onForceRefresh={() => setTick((t) => t + 1)}
     />
   );
 };
 
-const GroupChatInner: React.FC<{
+interface GroupChatCockpitProps {
   session: GroupChatSession;
   onReset: () => void;
+  onSwitchSession: (session: GroupChatSession) => void;
   showSummaryModal: boolean;
   setShowSummaryModal: (show: boolean) => void;
-  activeBottomTab: 'none' | 'events' | 'harness';
-  setActiveBottomTab: (tab: 'none' | 'events' | 'harness') => void;
+  activeRightTab: 'blackboard' | 'branches' | 'dissent' | 'events' | 'harness';
+  setActiveRightTab: (tab: 'blackboard' | 'branches' | 'dissent' | 'events' | 'harness') => void;
   onForceRefresh: () => void;
-}> = ({
+}
+
+const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
   session,
   onReset,
+  onSwitchSession,
   showSummaryModal,
   setShowSummaryModal,
-  activeBottomTab,
-  setActiveBottomTab,
+  activeRightTab,
+  setActiveRightTab,
   onForceRefresh,
 }) => {
   const chat = useGroupChat(session);
+  const [blindRunning, setBlindRunning] = useState(false);
 
   const handleSummarize = async () => {
     await chat.summarize();
     setShowSummaryModal(true);
   };
 
+  const handleTriggerBlindRound = async () => {
+    try {
+      setBlindRunning(true);
+      await chat.executeBlindRound();
+    } catch (err: any) {
+      alert(`Blind round error: ${err.message}`);
+    } finally {
+      setBlindRunning(false);
+      onForceRefresh();
+    }
+  };
+
+  const handleForkOnTurn = (turnId: string, branchName: string) => {
+    const childSession = chat.forkBranch({ forkTurnId: turnId, newBranchName: branchName });
+    onSwitchSession(childSession);
+  };
+
+  const protocol = chat.conversation.protocol || chat.conversation.groupSnapshot.protocol || 'standard';
+  const branchName = chat.conversation.branch?.branchName || 'main';
+  const blackboardItems = Object.values(chat.conversation.blackboard?.items || {});
+  const dissentCount = chat.conversation.dissentLog?.length || 0;
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Top Bar */}
-      <header className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur-xs">
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      {/* Deliberation Top Bar */}
+      <header className="flex items-center justify-between px-5 py-2.5 border-b border-slate-800 bg-slate-900/90 backdrop-blur-xs">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono tracking-wider">
               ROUNDTABLE
             </span>
-            <h1 className="text-sm font-bold tracking-tight text-white">
+            <h1 className="text-sm font-bold tracking-tight text-white truncate max-w-xs">
               {chat.conversation.groupSnapshot.name}
             </h1>
           </div>
-          <span className="text-[11px] text-slate-400 border-l border-slate-700 pl-3 hidden sm:inline">
-            Policy: <span className="text-cyan-300 font-mono">{chat.conversation.groupSnapshot.speakerPolicy}</span>
-          </span>
+
+          <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 border-l border-slate-800 pl-3">
+            <span>
+              Protocol:{' '}
+              <span className="text-cyan-300 font-mono font-medium capitalize">
+                {protocol.replace('-', ' ')}
+              </span>
+            </span>
+            <span>·</span>
+            <span>
+              Branch:{' '}
+              <span className="text-indigo-300 font-mono font-medium">{branchName}</span>
+            </span>
+            <span>·</span>
+            <span>
+              Turns: <span className="text-slate-200 font-mono tabular-nums">{chat.conversation.totalTurns}</span>
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          {/* Tab triggers */}
+        {/* Right workspace tab switcher */}
+        <div className="flex items-center gap-1.5 text-xs">
           <button
-            onClick={() => setActiveBottomTab(activeBottomTab === 'events' ? 'none' : 'events')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-              activeBottomTab === 'events'
-                ? 'bg-cyan-950/60 border-cyan-500/60 text-cyan-300'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+            onClick={() => setActiveRightTab('blackboard')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'blackboard'
+                ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            Event Stream
+            <ClipboardList className="w-3.5 h-3.5" />
+            <span>Blackboard</span>
+            {blackboardItems.length > 0 && (
+              <span className="px-1 py-0.2 rounded text-[10px] font-mono bg-emerald-900/60 text-emerald-200">
+                {blackboardItems.length}
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => setActiveBottomTab(activeBottomTab === 'harness' ? 'none' : 'harness')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-              activeBottomTab === 'harness'
+            onClick={() => setActiveRightTab('branches')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'branches'
+                ? 'bg-indigo-950/60 border-indigo-500/60 text-indigo-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            <span>Branch Tree</span>
+          </button>
+
+          <button
+            onClick={() => setActiveRightTab('dissent')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'dissent'
                 ? 'bg-amber-950/60 border-amber-500/60 text-amber-300'
-                : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>Dissent</span>
+            {dissentCount > 0 && (
+              <span className="px-1 py-0.2 rounded text-[10px] font-mono bg-amber-900/60 text-amber-200">
+                {dissentCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveRightTab('events')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'events'
+                ? 'bg-cyan-950/60 border-cyan-500/60 text-cyan-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Events</span>
+          </button>
+
+          <button
+            onClick={() => setActiveRightTab('harness')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'harness'
+                ? 'bg-purple-950/60 border-purple-500/60 text-purple-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
-            Acceptance Harness
+            <span className="hidden sm:inline">Harness</span>
           </button>
 
           <button
             onClick={onReset}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition ml-1"
           >
             <Settings className="w-3.5 h-3.5" />
-            New Group
+            <span className="hidden md:inline">Setup</span>
           </button>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* Message List */}
-        <MessageList
-          conversation={chat.conversation}
-          streamingTurnId={chat.streamingTurnId}
-          streamingContent={chat.streamingContent}
-          moderatorNote={chat.moderatorNote}
-        />
+      {/* Main Two-Pane Deliberation Cockpit */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Left Pane: Deliberation Transcript & Controls */}
+        <div className="flex-1 flex flex-col min-h-0 border-r border-slate-800/80 bg-slate-950">
+          {blindRunning && (
+            <div className="p-2.5 bg-indigo-950/60 border-b border-indigo-800/80 text-xs text-indigo-200 flex items-center justify-between animate-pulse">
+              <span className="flex items-center gap-2">
+                <EyeOff className="w-4 h-4 text-indigo-400" />
+                <span>Executing parallel blind round: models generating without peer bias...</span>
+              </span>
+              <span className="font-mono text-[11px]">Epistemic Isolation</span>
+            </div>
+          )}
 
-        {/* Collapsible Inspection Panel (Event Log / Test Harness) */}
-        {activeBottomTab === 'events' && (
-          <div className="border-t border-slate-800 max-h-[300px] overflow-hidden p-3 bg-slate-950">
-            <EventLogView conversation={chat.conversation} />
-          </div>
-        )}
+          <MessageList
+            conversation={chat.conversation}
+            streamingTurnId={chat.streamingTurnId}
+            streamingContent={chat.streamingContent}
+            moderatorNote={chat.moderatorNote}
+          />
 
-        {activeBottomTab === 'harness' && (
-          <div className="border-t border-slate-800 max-h-[280px] overflow-hidden p-3 bg-slate-950">
-            <TestHarness session={session} onRefreshView={onForceRefresh} />
-          </div>
-        )}
+          <TurnControls
+            conversation={chat.conversation}
+            isRunning={chat.isRunning}
+            isPaused={chat.isPaused}
+            isEnded={chat.isEnded}
+            onStart={chat.start}
+            onStep={chat.step}
+            onRun={chat.run}
+            onPause={chat.pause}
+            onResume={chat.resume}
+            onStop={() => chat.stop('Stopped by user')}
+            onInterject={chat.interject}
+            onSummarize={handleSummarize}
+            onBlindRound={handleTriggerBlindRound}
+            onForkBranch={() => setActiveRightTab('branches')}
+          />
+        </div>
 
-        {/* Bottom Turn Controls */}
-        <TurnControls
-          conversation={chat.conversation}
-          isRunning={chat.isRunning}
-          isPaused={chat.isPaused}
-          isEnded={chat.isEnded}
-          onStart={chat.start}
-          onStep={chat.step}
-          onRun={chat.run}
-          onPause={chat.pause}
-          onResume={chat.resume}
-          onStop={() => chat.stop('Stopped by user')}
-          onInterject={chat.interject}
-          onSummarize={handleSummarize}
-        />
+        {/* Right Pane: Deliberation Workspace (Blackboard / Branch Tree / Dissent / Events) */}
+        <div className="w-[440px] xl:w-[480px] hidden lg:flex flex-col min-h-0 bg-slate-950">
+          {activeRightTab === 'blackboard' && (
+            <BlackboardView
+              blackboard={chat.conversation.blackboard || { items: {}, updatedAt: 0 }}
+              onAddItem={chat.addBlackboardItem}
+              onResolveItem={chat.resolveBlackboardItem}
+            />
+          )}
+
+          {activeRightTab === 'branches' && (
+            <BranchTreeVisualizer
+              conversation={chat.conversation}
+              onForkTurn={handleForkOnTurn}
+              onSwitchBranch={(convId) => {
+                // If switching to an existing branch
+                const target = session.storage.loadConversation(convId);
+                target.then((c) => {
+                  if (c) {
+                    const switched = createGroupChat({
+                      group: c.groupSnapshot,
+                      agents: c.agentSnapshots,
+                      initialEvents: c.events,
+                      providerRegistry: session.providers,
+                      storage: session.storage,
+                    });
+                    onSwitchSession(switched);
+                  }
+                });
+              }}
+            />
+          )}
+
+          {activeRightTab === 'dissent' && (
+            <DissentLogView
+              conversation={chat.conversation}
+              onLogDissent={chat.logDissent}
+            />
+          )}
+
+          {activeRightTab === 'events' && (
+            <div className="flex-1 overflow-hidden p-3 bg-slate-950 flex flex-col">
+              <EventLogView conversation={chat.conversation} />
+            </div>
+          )}
+
+          {activeRightTab === 'harness' && (
+            <div className="flex-1 overflow-hidden p-3 bg-slate-950 flex flex-col">
+              <TestHarness session={session} onRefreshView={onForceRefresh} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Summaries & Export Modal */}

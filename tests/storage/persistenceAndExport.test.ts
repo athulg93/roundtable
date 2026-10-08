@@ -72,6 +72,10 @@ const mockConv: Conversation = {
       openQuestions: [],
     },
   },
+  blackboard: { items: {}, updatedAt: 1000 },
+  dissentLog: [],
+  branch: { conversationId: 'conv-export-1', branchName: 'main', createdAt: 1000 },
+  protocol: 'standard',
   createdAt: 1000,
   updatedAt: 1200,
 };

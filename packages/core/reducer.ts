@@ -1,5 +1,5 @@
 /**
- * Multi-Agent Group Chat - Event Log Reducer (Section 3.1, 3.6, P1.1)
+ * Multi-Agent Group Chat - Event Log Reducer (Section 3.1, 3.6, Phase 1 & Phase 2)
  * Pure function that derives state from an append-only event stream.
  * Replaying the same event log reconstructs the exact same state deterministically.
  */
@@ -36,6 +36,17 @@ export function reduceConversation(
         events: [event],
         turns: [],
         summaries: {},
+        blackboard: {
+          items: {},
+          updatedAt: event.timestamp,
+        },
+        dissentLog: [],
+        branch: {
+          conversationId: event.conversationId,
+          branchName: event.payload.branchName || 'main',
+          createdAt: event.timestamp,
+        },
+        protocol: event.payload.protocol || 'standard',
         createdAt: event.timestamp,
         updatedAt: event.timestamp,
       };
@@ -122,13 +133,11 @@ export function reduceConversation(
         estimatedCost: state.totalUsage.estimatedCost + (usage?.estimatedCost || 0),
       };
 
-      // Compute round count: if the speaker is a participant agent, increment turn count
       const completedTurnsCount = turns.filter(
         (t) => t.status === 'completed' && t.role === 'agent'
       ).length;
-      const participantCount = Object.values(state.agentSnapshots).filter(
-        (a) => a.role === 'participant'
-      ).length || 1;
+      const participantCount =
+        Object.values(state.agentSnapshots).filter((a) => a.role === 'participant').length || 1;
       const roundCount = Math.floor(completedTurnsCount / participantCount);
 
       return {
@@ -203,13 +212,120 @@ export function reduceConversation(
         summaries.renderedMarkdown = event.payload.content;
       } else if (event.payload.summaryType === 'detailed') {
         summaries.detailed = event.payload.structured as DetailedSummary;
-        summaries.renderedMarkdown = (summaries.renderedMarkdown ? summaries.renderedMarkdown + '\n\n' : '') + event.payload.content;
+        summaries.renderedMarkdown =
+          (summaries.renderedMarkdown ? summaries.renderedMarkdown + '\n\n' : '') +
+          event.payload.content;
       }
 
       return {
         ...state,
         events: [...state.events, event],
         summaries,
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Blackboard Item Added ---
+    case 'blackboard.item_added': {
+      if (!state) throw new Error('Cannot apply blackboard event before conversation.created');
+      const item = event.payload.item;
+      const currentBlackboard = state.blackboard || { items: {}, updatedAt: event.timestamp };
+      const items = {
+        ...currentBlackboard.items,
+        [item.id]: item,
+      };
+
+      return {
+        ...state,
+        events: [...state.events, event],
+        blackboard: {
+          items,
+          updatedAt: event.timestamp,
+        },
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Blackboard Item Resolved ---
+    case 'blackboard.item_resolved': {
+      if (!state) throw new Error('Cannot apply blackboard event before conversation.created');
+      const currentBlackboard = state.blackboard || { items: {}, updatedAt: event.timestamp };
+      const existing = currentBlackboard.items[event.payload.itemId];
+      if (!existing) {
+        return {
+          ...state,
+          events: [...state.events, event],
+        };
+      }
+
+      const updatedItem = {
+        ...existing,
+        status: event.payload.status,
+        resolvedReason: event.payload.reason,
+      };
+
+      const items = {
+        ...currentBlackboard.items,
+        [event.payload.itemId]: updatedItem,
+      };
+
+      return {
+        ...state,
+        events: [...state.events, event],
+        blackboard: {
+          items,
+          updatedAt: event.timestamp,
+        },
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Blind Round Completed ---
+    case 'blind_round.completed': {
+      if (!state) throw new Error('Cannot apply blind_round before conversation.created');
+      return {
+        ...state,
+        events: [...state.events, event],
+        blindRoundStances: event.payload.stances,
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Conversation Forked ---
+    case 'conversation.forked': {
+      if (!state) throw new Error('Cannot apply conversation.forked before conversation.created');
+      return {
+        ...state,
+        events: [...state.events, event],
+        branch: {
+          conversationId: state.id,
+          branchName: event.payload.newBranchName,
+          parentConversationId: event.payload.parentConversationId,
+          forkSequence: event.payload.forkTurnSequence,
+          forkTurnId: event.payload.forkTurnId,
+          createdAt: event.timestamp,
+        },
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Dissent Logged ---
+    case 'dissent.logged': {
+      if (!state) throw new Error('Cannot apply dissent.logged before conversation.created');
+      return {
+        ...state,
+        events: [...state.events, event],
+        dissentLog: [...(state.dissentLog || []), event.payload.dissent],
+        updatedAt: event.timestamp,
+      };
+    }
+
+    // --- Phase 2: Stall Detected ---
+    case 'stall.detected': {
+      if (!state) throw new Error('Cannot apply stall.detected before conversation.created');
+      return {
+        ...state,
+        events: [...state.events, event],
         updatedAt: event.timestamp,
       };
     }

@@ -34,6 +34,11 @@ export interface UseGroupChatReturn {
   stop: (reason?: string) => void;
   interject: (text: string, senderName?: string) => Promise<void>;
   summarize: () => Promise<{ nextSteps: NextStepsSummary; detailed: DetailedSummary }>;
+  executeBlindRound: () => Promise<any>;
+  forkBranch: (options: { forkTurnId?: string; forkSequence?: number; newBranchName?: string }) => GroupChatSession;
+  addBlackboardItem: (category: 'decision' | 'hypothesis' | 'assumption' | 'open_question', text: string) => Promise<void>;
+  resolveBlackboardItem: (itemId: string, status: 'resolved' | 'rejected', reason?: string) => Promise<void>;
+  logDissent: (objection: string, topic?: string) => Promise<void>;
 }
 
 export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
@@ -109,6 +114,26 @@ export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
     []
   );
   const summarize = useCallback(() => sessionRef.current.summarize(), []);
+  const executeBlindRound = useCallback(() => sessionRef.current.executeBlindRound(), []);
+  const forkBranch = useCallback(
+    (options: { forkTurnId?: string; forkSequence?: number; newBranchName?: string }) =>
+      sessionRef.current.forkBranch(options),
+    []
+  );
+  const addBlackboardItem = useCallback(
+    (category: 'decision' | 'hypothesis' | 'assumption' | 'open_question', text: string) =>
+      sessionRef.current.addBlackboardItem(category, text),
+    []
+  );
+  const resolveBlackboardItem = useCallback(
+    (itemId: string, status: 'resolved' | 'rejected', reason?: string) =>
+      sessionRef.current.resolveBlackboardItem(itemId, status, reason),
+    []
+  );
+  const logDissent = useCallback(
+    (objection: string, topic?: string) => sessionRef.current.logDissent(objection, topic),
+    []
+  );
 
   return {
     session,
@@ -129,5 +154,10 @@ export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
     stop,
     interject,
     summarize,
+    executeBlindRound,
+    forkBranch,
+    addBlackboardItem,
+    resolveBlackboardItem,
+    logDissent,
   };
 }

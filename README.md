@@ -199,6 +199,11 @@ npm run build
 - **Provider Adapters (`tests/providers/adaptersAndFailure.test.ts`)**: Tests streaming, error normalization, secret redaction, and server outage simulation.
 - **Persistence & Export (`tests/storage/persistenceAndExport.test.ts`)**: Tests reload from storage and verifies zero secrets in JSON/Markdown exports.
 - **E2E Acceptance Suite (`tests/acceptance/e2eScenario.test.ts`)**: Validates all 10 acceptance checkpoints end-to-end.
+- **Shared Structured Blackboard (`tests/core/blackboard.test.ts`)**: Validates live working memory reductions, structured tag extraction, and deterministic replay.
+- **Blind-First Deliberation (`tests/reasoning/blindDeliberation.test.ts`)**: Proves parallel epistemic isolation with zero prior peer turn exposure and simultaneous blackboard synthesis.
+- **Branching & Forking Engine (`tests/core/branching.test.ts`)**: Validates forking at historical turns, event log slicing, and parent-child session isolation.
+- **Deliberation Protocol Presets (`tests/reasoning/protocols.test.ts`)**: Tests strict turn ordering for Formal Debate, Adversarial Red-Team, and Pre-Mortem Analysis.
+- **Stall Detection & Dissent Log (`tests/reasoning/stallAndDissent.test.ts`)**: Validates Szymkiewicz-Simpson semantic loop detection and guaranteed permanent archival of minority viewpoints.
 
 ---
 
@@ -214,13 +219,14 @@ npm run build
   - Next-steps and detailed deliberation summaries
   - Browser LocalStorage persistence and secret-free exports
   - Thin embeddable React component and hooks
-- [ ] **Phase 2: Advanced Multi-Agent Reasoning**
-  - Shared structured blackboard (decisions, open questions, assumptions)
-  - Blind-first deliberation rounds
-  - Branching, forking, and rewind
-  - Conversation protocol presets (debate, red-team, pre-mortem)
-  - Stall detection and dissent log
-  - Resource-aware model scheduling
+- [x] **Phase 2: Advanced Multi-Agent Reasoning Engine**
+  - Shared structured blackboard (decisions, hypotheses, assumptions, open questions)
+  - Blind-first deliberation rounds with parallel epistemic isolation
+  - Interactive branch tree with what-if counterfactual exploration
+  - Deliberation protocol presets (Debate, Adversarial Red-Team, Pre-Mortem, Delphi)
+  - Semantic stall detection & immutable dissent log
+  - Hybrid tiered model scheduling (fast local models for brainstorming, frontier models for arbitration)
+  - Two-pane high-density deliberation cockpit UI
 - [ ] **Phase 3: Integrations & Platform**
   - VS Code extension webview
   - Tools and workspace grounding via MCP
