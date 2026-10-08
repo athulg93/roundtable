@@ -29,7 +29,17 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
 
   const storage = new LocalStorageAdapter();
 
-  const handleCreateSession = (group: Group, agents: Record<string, Agent>) => {
+  const handleCreateSession = (
+    group: Group,
+    agents: Record<string, Agent>,
+    customAdapters?: Record<string, import('../providers/types.ts').ProviderAdapter>
+  ) => {
+    if (customAdapters) {
+      for (const [, adapter] of Object.entries(customAdapters)) {
+        defaultProviderRegistry.register(adapter);
+      }
+    }
+
     // Persist group & agents
     storage.saveGroup(group).catch(console.error);
     for (const a of Object.values(agents)) {

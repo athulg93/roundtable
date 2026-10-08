@@ -5,3 +5,5 @@ export * from './openaiAdapter.ts';
 export * from './anthropicAdapter.ts';
 export * from './geminiAdapter.ts';
 export * from './registry.ts';
+export * from './presets.ts';
+export * from './factory.ts';

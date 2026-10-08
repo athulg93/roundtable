@@ -1,15 +1,39 @@
 /**
  * GroupSetup Component (P1.10)
  * Group and Agent Configuration view with multi-model assignments,
- * moderator selection, policies, and presets.
+ * support for OpenAI, Claude, Gemini, and Local LLMs (Ollama, LM Studio).
  */
 
 import React, { useState } from 'react';
 import { Agent, Group, SpeakerSelectionPolicy, TerminationPolicy } from '../core/types.ts';
-import { Bot, Shield, Plus, Trash2, Sparkles, Sliders } from 'lucide-react';
+import {
+  SupportedProviderType,
+  PROVIDER_PRESETS,
+} from '../providers/presets.ts';
+import { createConfiguredAdapter } from '../providers/factory.ts';
+import { ProviderAdapter } from '../providers/types.ts';
+import {
+  Bot,
+  Shield,
+  Plus,
+  Trash2,
+  Sparkles,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Radio,
+  ExternalLink,
+  RefreshCw,
+} from 'lucide-react';
 
 export interface GroupSetupProps {
-  onStartSession: (group: Group, agents: Record<string, Agent>) => void;
+  onStartSession: (
+    group: Group,
+    agents: Record<string, Agent>,
+    adapters?: Record<string, ProviderAdapter>
+  ) => void;
 }
 
 const PRESET_TOPICS = [
@@ -27,12 +51,25 @@ const PRESET_TOPICS = [
   },
 ];
 
+interface AgentConnectionState {
+  providerType: SupportedProviderType;
+  baseUrl: string;
+  apiKey: string;
+  showApiKey: boolean;
+  testing: boolean;
+  testStatus?: {
+    success: boolean;
+    message: string;
+    discoveredModels?: string[];
+  };
+}
+
 const INITIAL_AGENTS: Agent[] = [
   {
     id: 'agent-architect',
     name: 'System Architect',
     role: 'participant',
-    provider: 'mock',
+    provider: 'provider-agent-architect',
     model: 'mock-pro',
     rolePrompt: 'Senior Distributed Systems Architect. Prioritize composability, clean provider abstraction, single-writer queues, and backward-compatible event schemas.',
     temperature: 0.7,
@@ -45,7 +82,7 @@ const INITIAL_AGENTS: Agent[] = [
     id: 'agent-security',
     name: 'Security Lead',
     role: 'participant',
-    provider: 'mock',
+    provider: 'provider-agent-security',
     model: 'mock-fast',
     rolePrompt: 'Application Security Engineer. Enforce zero API secrets in event logs or exported JSON, boundary sanitation, and token budget bounds.',
     temperature: 0.5,
@@ -58,7 +95,7 @@ const INITIAL_AGENTS: Agent[] = [
     id: 'agent-reliability',
     name: 'SRE / Reliability Lead',
     role: 'participant',
-    provider: 'gemini',
+    provider: 'provider-agent-reliability',
     model: 'gemini-2.5-flash',
     rolePrompt: 'Site Reliability Engineer. Champion timeout boundaries, exponential backoff, circuit breaking when servers die, and automatic context compression.',
     temperature: 0.6,
@@ -71,7 +108,7 @@ const INITIAL_AGENTS: Agent[] = [
     id: 'agent-moderator',
     name: 'Discussion Moderator',
     role: 'moderator',
-    provider: 'mock',
+    provider: 'provider-agent-moderator',
     model: 'mock-pro',
     rolePrompt: 'Discussion Moderator. Keep the group aligned on the goal, invite relevant experts to speak next, prevent deadlocks, and synthesize conclusions.',
     temperature: 0.2,
@@ -82,6 +119,37 @@ const INITIAL_AGENTS: Agent[] = [
   },
 ];
 
+const INITIAL_CONNECTIONS: Record<string, AgentConnectionState> = {
+  'agent-architect': {
+    providerType: 'mock',
+    baseUrl: '',
+    apiKey: '',
+    showApiKey: false,
+    testing: false,
+  },
+  'agent-security': {
+    providerType: 'mock',
+    baseUrl: '',
+    apiKey: '',
+    showApiKey: false,
+    testing: false,
+  },
+  'agent-reliability': {
+    providerType: 'gemini',
+    baseUrl: '',
+    apiKey: '',
+    showApiKey: false,
+    testing: false,
+  },
+  'agent-moderator': {
+    providerType: 'mock',
+    baseUrl: '',
+    apiKey: '',
+    showApiKey: false,
+    testing: false,
+  },
+};
+
 export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [groupName, setGroupName] = useState('Core Architecture Working Group');
   const [goal, setGoal] = useState(PRESET_TOPICS[0].goal);
@@ -91,6 +159,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [maxTokens, setMaxTokens] = useState(50000);
   const [moderatorId, setModeratorId] = useState('agent-moderator');
   const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
+  const [connections, setConnections] = useState<Record<string, AgentConnectionState>>(INITIAL_CONNECTIONS);
 
   const handleApplyPreset = (index: number) => {
     setGroupName(PRESET_TOPICS[index].name);
@@ -103,8 +172,8 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       id,
       name: `Specialist ${agents.length + 1}`,
       role: 'participant',
-      provider: 'mock',
-      model: 'mock-fast',
+      provider: `provider-${id}`,
+      model: 'llama3.2',
       rolePrompt: 'Domain expert contributing critical domain insights to achieve the discussion goal.',
       temperature: 0.7,
       maxOutputTokens: 1024,
@@ -112,7 +181,18 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       timeoutSettings: { firstTokenMs: 10000, totalMs: 30000 },
       visualIdentity: { color: '#eab308' },
     };
+
     setAgents([...agents, newAgent]);
+    setConnections({
+      ...connections,
+      [id]: {
+        providerType: 'ollama',
+        baseUrl: PROVIDER_PRESETS.ollama.defaultBaseUrl || '',
+        apiKey: '',
+        showApiKey: false,
+        testing: false,
+      },
+    });
   };
 
   const handleRemoveAgent = (id: string) => {
@@ -122,6 +202,9 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
     }
     const filtered = agents.filter((a) => a.id !== id);
     setAgents(filtered);
+    const updatedConns = { ...connections };
+    delete updatedConns[id];
+    setConnections(updatedConns);
     if (moderatorId === id) {
       setModeratorId(filtered[0]?.id || '');
     }
@@ -129,6 +212,89 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
 
   const handleUpdateAgent = (id: string, updates: Partial<Agent>) => {
     setAgents(agents.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+  };
+
+  const handleUpdateConnection = (id: string, updates: Partial<AgentConnectionState>) => {
+    setConnections({
+      ...connections,
+      [id]: {
+        ...connections[id],
+        ...updates,
+      },
+    });
+  };
+
+  const handleProviderTypeChange = (agentId: string, newType: SupportedProviderType) => {
+    const preset = PROVIDER_PRESETS[newType];
+    const defaultModel = preset.popularModels[0] || 'default';
+
+    // Update connection
+    handleUpdateConnection(agentId, {
+      providerType: newType,
+      baseUrl: preset.defaultBaseUrl || '',
+      testStatus: undefined,
+    });
+
+    // Update agent default model
+    handleUpdateAgent(agentId, {
+      model: defaultModel,
+    });
+  };
+
+  // Test provider connection
+  const handleTestConnection = async (agentId: string) => {
+    const conn = connections[agentId];
+    if (!conn) return;
+
+    handleUpdateConnection(agentId, { testing: true, testStatus: undefined });
+
+    try {
+      const adapter = createConfiguredAdapter(`test-${agentId}`, conn.providerType, {
+        baseUrl: conn.baseUrl,
+        apiKey: conn.apiKey,
+      });
+
+      const isHealthy = await adapter.healthCheck();
+      let discoveredModels: string[] | undefined;
+
+      try {
+        const models = await adapter.listModels();
+        if (models && models.length > 0) {
+          discoveredModels = models.map((m) => m.id);
+        }
+      } catch {
+        // Model discovery optional
+      }
+
+      if (isHealthy || (discoveredModels && discoveredModels.length > 0)) {
+        handleUpdateConnection(agentId, {
+          testing: false,
+          testStatus: {
+            success: true,
+            message: `Connected successfully! ${discoveredModels ? `(${discoveredModels.length} models discovered)` : ''}`,
+            discoveredModels,
+          },
+        });
+      } else {
+        handleUpdateConnection(agentId, {
+          testing: false,
+          testStatus: {
+            success: false,
+            message: conn.providerType === 'ollama' || conn.providerType === 'lmstudio'
+              ? 'Could not connect. Verify server is running and CORS is enabled.'
+              : 'Connection check returned false. Verify API key and network.',
+          },
+        });
+      }
+    } catch (err: any) {
+      handleUpdateConnection(agentId, {
+        testing: false,
+        testStatus: {
+          success: false,
+          message: err.message || 'Connection test failed',
+        },
+      });
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -139,10 +305,30 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
     }
 
     const agentsMap: Record<string, Agent> = {};
+    const adaptersMap: Record<string, ProviderAdapter> = {};
+
     for (const a of agents) {
-      // Mark the selected moderator agent
+      const conn = connections[a.id] || {
+        providerType: 'mock' as SupportedProviderType,
+        baseUrl: '',
+        apiKey: '',
+      };
+
+      const adapterId = `provider-${a.id}`;
+
+      // Create isolated configured adapter
+      const adapter = createConfiguredAdapter(adapterId, conn.providerType, {
+        baseUrl: conn.baseUrl,
+        apiKey: conn.apiKey,
+        name: `${a.name} (${PROVIDER_PRESETS[conn.providerType].label})`,
+      });
+
+      adaptersMap[adapterId] = adapter;
+
+      // Assign agent snapshot with reference to adapter ID
       agentsMap[a.id] = {
         ...a,
+        provider: adapterId,
         role: a.id === moderatorId ? 'moderator' : 'participant',
       };
     }
@@ -162,7 +348,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       updatedAt: Date.now(),
     };
 
-    onStartSession(group, agentsMap);
+    onStartSession(group, agentsMap, adaptersMap);
   };
 
   return (
@@ -172,14 +358,14 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 uppercase tracking-wider">
-              Phase 1 MVP Specification
+              Roundtable • Multi-Model Orchestration
             </span>
           </div>
           <h1 className="text-xl font-bold text-slate-100">
             Roundtable — Multi-Agent Deliberation Engine
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Configure participant agents, assign a model-driven moderator, select orchestration policies, and run reasoned deliberation.
+            Configure participant agents with any combination of Local LLMs (Ollama, LM Studio) or Frontier Models (OpenAI, Claude, Gemini, OpenRouter).
           </p>
         </div>
 
@@ -229,11 +415,15 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
                 onChange={(e) => setModeratorId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
               >
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.provider} / {a.model})
-                  </option>
-                ))}
+                {agents.map((a) => {
+                  const conn = connections[a.id];
+                  const providerLabel = conn ? PROVIDER_PRESETS[conn.providerType].label : a.provider;
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({providerLabel} / {a.model})
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -308,9 +498,14 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
         {/* Agents Configuration */}
         <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Bot className="w-4 h-4 text-cyan-400" /> Multi-Agent Participants ({agents.length})
-            </h2>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <Bot className="w-4 h-4 text-cyan-400" /> Multi-Agent Participants ({agents.length})
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Assign different local or frontier models to each agent. Credentials stay strictly client-side.
+              </p>
+            </div>
             <button
               type="button"
               onClick={handleAddAgent}
@@ -323,14 +518,23 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {agents.map((agent) => {
               const isMod = agent.id === moderatorId;
+              const conn = connections[agent.id] || {
+                providerType: 'mock' as SupportedProviderType,
+                baseUrl: '',
+                apiKey: '',
+                showApiKey: false,
+                testing: false,
+              };
+              const preset = PROVIDER_PRESETS[conn.providerType];
 
               return (
                 <div
                   key={agent.id}
-                  className={`bg-slate-950 border rounded-xl p-4 space-y-3 relative transition-all ${
+                  className={`bg-slate-950 border rounded-xl p-4 space-y-3.5 relative transition-all ${
                     isMod ? 'border-purple-500/50 shadow-xs shadow-purple-500/10' : 'border-slate-800'
                   }`}
                 >
+                  {/* Agent Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div
@@ -374,32 +578,165 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
                     </div>
                   </div>
 
-                  {/* Provider & Model Selectors */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <label className="block text-[10px] text-slate-400 mb-0.5">Provider</label>
-                      <select
-                        value={agent.provider}
-                        onChange={(e) => handleUpdateAgent(agent.id, { provider: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs"
-                      >
-                        <option value="mock">Deterministic Mock</option>
-                        <option value="gemini">Google Gemini</option>
-                        <option value="openai-compatible">OpenAI-Compatible (Ollama/LM Studio)</option>
-                        <option value="anthropic">Anthropic Claude</option>
-                      </select>
+                  {/* Provider Selector */}
+                  <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800/80 space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-0.5 font-medium">Provider Service</label>
+                        <select
+                          value={conn.providerType}
+                          onChange={(e) => handleProviderTypeChange(agent.id, e.target.value as SupportedProviderType)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs cursor-pointer focus:border-cyan-500"
+                        >
+                          <option value="mock">🧪 Deterministic Mock</option>
+                          <option value="ollama">💻 Ollama (Local LLM)</option>
+                          <option value="lmstudio">🖥️ LM Studio (Local LLM)</option>
+                          <option value="openai">⚡ OpenAI</option>
+                          <option value="anthropic">🧠 Anthropic Claude</option>
+                          <option value="gemini">💎 Google Gemini</option>
+                          <option value="openrouter">🌐 OpenRouter</option>
+                          <option value="openai-compatible">⚙️ Custom OpenAI-Compatible</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-0.5 font-medium">Model Name</label>
+                        <input
+                          type="text"
+                          value={agent.model}
+                          onChange={(e) => handleUpdateAgent(agent.id, { model: e.target.value })}
+                          placeholder="e.g. gpt-4o, llama3.2"
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono focus:border-cyan-500"
+                        />
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] text-slate-400 mb-0.5">Model</label>
-                      <input
-                        type="text"
-                        value={agent.model}
-                        onChange={(e) => handleUpdateAgent(agent.id, { model: e.target.value })}
-                        placeholder="e.g. mock-pro, gemini-2.5-flash"
-                        className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono"
-                      />
+                    {/* Popular model chips */}
+                    {preset.popularModels && preset.popularModels.length > 0 && (
+                      <div>
+                        <span className="text-[9px] text-slate-500 block mb-1">Suggested Models:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {preset.popularModels.map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleUpdateAgent(agent.id, { model: m })}
+                              className={`text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${
+                                agent.model === m
+                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Custom Base URL (if configurable) */}
+                    {conn.providerType !== 'gemini' && conn.providerType !== 'mock' && (
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-0.5">
+                          Base URL Endpoint
+                        </label>
+                        <input
+                          type="text"
+                          value={conn.baseUrl}
+                          onChange={(e) => handleUpdateConnection(agent.id, { baseUrl: e.target.value })}
+                          placeholder={preset.defaultBaseUrl || 'http://localhost:11434/v1'}
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-[11px] font-mono focus:border-cyan-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* API Key Input (if applicable) */}
+                    {preset.requiresApiKey && (
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
+                          <span>API Key</span>
+                          <span className="text-[9px] text-emerald-400">Client-side only (never saved to logs)</span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type={conn.showApiKey ? 'text' : 'password'}
+                            value={conn.apiKey}
+                            onChange={(e) => handleUpdateConnection(agent.id, { apiKey: e.target.value })}
+                            placeholder={preset.apiKeyPlaceholder || 'Enter API Key...'}
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 text-xs font-mono pr-7 focus:border-cyan-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateConnection(agent.id, { showApiKey: !conn.showApiKey })}
+                            className="absolute right-2 top-1.5 text-slate-500 hover:text-slate-300"
+                          >
+                            {conn.showApiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CORS Notice for Local LLMs */}
+                    {preset.corsNotice && (
+                      <div className="text-[10px] text-amber-400/90 bg-amber-950/30 border border-amber-900/40 p-2 rounded leading-tight flex items-start gap-1.5">
+                        <Radio className="w-3 h-3 shrink-0 mt-0.5 text-amber-400" />
+                        <span>{preset.corsNotice}</span>
+                      </div>
+                    )}
+
+                    {/* Connection Test Action & Result */}
+                    <div className="pt-1 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => handleTestConnection(agent.id)}
+                        disabled={conn.testing}
+                        className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 disabled:opacity-50 transition-colors"
+                      >
+                        {conn.testing ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" /> Testing...
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="w-3 h-3" /> Test Connection
+                          </>
+                        )}
+                      </button>
+
+                      {conn.testStatus && (
+                        <div
+                          className={`flex items-center gap-1 text-[10px] ${
+                            conn.testStatus.success ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {conn.testStatus.success ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span className="truncate max-w-[180px]">{conn.testStatus.message}</span>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Discovered Models Dropdown from Live Server */}
+                    {conn.testStatus?.discoveredModels && conn.testStatus.discoveredModels.length > 0 && (
+                      <div className="bg-slate-950 p-2 rounded border border-slate-800 text-[10px]">
+                        <span className="text-slate-400 block mb-1">Discovered on Server:</span>
+                        <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                          {conn.testStatus.discoveredModels.map((dm) => (
+                            <button
+                              key={dm}
+                              type="button"
+                              onClick={() => handleUpdateAgent(agent.id, { model: dm })}
+                              className="px-1.5 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800 text-cyan-200 font-mono text-[9px]"
+                            >
+                              + {dm}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Role Persona */}
@@ -413,7 +750,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
                     />
                   </div>
 
-                  {/* Budget & Output Parameters */}
+                  {/* Budget & Parameters */}
                   <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-400 pt-1">
                     <div>
                       <span>Context Budget</span>

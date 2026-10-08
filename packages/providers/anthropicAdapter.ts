@@ -58,6 +58,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
     };
     if (this.apiKey) {
       headers['x-api-key'] = this.apiKey;
