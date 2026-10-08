@@ -1,8 +1,16 @@
 {
   "name": "roundtable",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./core": "./packages/core/index.ts",
+    "./providers": "./packages/providers/index.ts",
+    "./storage": "./packages/storage/index.ts",
+    "./react": "./packages/ui-react/index.ts"
+  },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",

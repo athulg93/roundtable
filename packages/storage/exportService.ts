@@ -64,7 +64,7 @@ export class ExportService {
     const participants = Object.values(conversation.agentSnapshots)
       .map(
         (a) =>
-          `- **${a.name}** (${a.role === 'moderator' ? 'Moderator' : 'Participant'}, Model: \`${a.model}\` via \`${a.provider}\`): ${a.rolePrompt.slice(0, 150)}...`
+          `- **${a.name}** (${a.role === 'moderator' ? 'Moderator' : 'Participant'}, Model: \`${a.model}\` via \`${a.provider}\`): ${(a.rolePrompt || 'Analytical deliberation participant').slice(0, 150)}...`
       )
       .join('\n');
 

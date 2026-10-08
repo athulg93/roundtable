@@ -6,3 +6,4 @@ export * from './TurnControls.tsx';
 export * from './SummaryView.tsx';
 export * from './EventLogView.tsx';
 export * from './TestHarness.tsx';
+export * from './DeveloperGuideModal.tsx';

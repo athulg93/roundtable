@@ -12,6 +12,7 @@ import {
 } from '../providers/presets.ts';
 import { createConfiguredAdapter } from '../providers/factory.ts';
 import { ProviderAdapter } from '../providers/types.ts';
+import { DeveloperGuideModal } from './DeveloperGuideModal.tsx';
 import {
   Bot,
   Shield,
@@ -26,6 +27,7 @@ import {
   Radio,
   ExternalLink,
   RefreshCw,
+  Code,
 } from 'lucide-react';
 
 export interface GroupSetupProps {
@@ -160,6 +162,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [moderatorId, setModeratorId] = useState('agent-moderator');
   const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
   const [connections, setConnections] = useState<Record<string, AgentConnectionState>>(INITIAL_CONNECTIONS);
+  const [showDevGuide, setShowDevGuide] = useState(false);
 
   const handleApplyPreset = (index: number) => {
     setGroupName(PRESET_TOPICS[index].name);
@@ -375,6 +378,13 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
             <Sparkles className="w-3 h-3 text-cyan-400" /> Topic Presets
           </span>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowDevGuide(true)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 font-semibold transition-colors flex items-center gap-1 shadow-xs"
+            >
+              <Code className="w-3 h-3 text-cyan-400" /> Pluggable API Guide
+            </button>
             {PRESET_TOPICS.map((p, idx) => (
               <button
                 key={idx}
@@ -741,12 +751,16 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
 
                   {/* Role Persona */}
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">Role Persona & Perspective</label>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
+                      <span className="font-medium">Assigned Role & Instructions</span>
+                      <span className="text-[9px] text-cyan-400/80 font-mono font-medium">(Optional)</span>
+                    </div>
                     <textarea
                       rows={2}
-                      value={agent.rolePrompt}
+                      value={agent.rolePrompt || ''}
                       onChange={(e) => handleUpdateAgent(agent.id, { rolePrompt: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-[11px] text-slate-300 leading-relaxed focus:outline-none focus:border-cyan-500"
+                      placeholder="Optional: Define what role this agent is supposed to do (e.g. 'Security auditor evaluating threat vectors'). If left empty, agent contributes as a general analytical expert."
+                      className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-[11px] text-slate-300 leading-relaxed focus:outline-none focus:border-cyan-500 placeholder-slate-600"
                     />
                   </div>
 
@@ -803,6 +817,9 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
           </button>
         </div>
       </form>
+
+      {/* Pluggable Integration Guide Modal */}
+      {showDevGuide && <DeveloperGuideModal onClose={() => setShowDevGuide(false)} />}
     </div>
   );
 };

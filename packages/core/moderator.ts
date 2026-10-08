@@ -33,7 +33,7 @@ export function buildModeratorPrompt(
 ): string {
   const group = conversation.groupSnapshot;
   const validAgentList = participants
-    .map((p) => `- ID: "${p.id}" | Name: "${p.name}" | Persona: ${p.rolePrompt.slice(0, 100)}`)
+    .map((p) => `- ID: "${p.id}" | Name: "${p.name}" | Persona: ${(p.rolePrompt || 'Analytical deliberation participant').slice(0, 100)}`)
     .join('\n');
 
   const recentTurns = conversation.turns

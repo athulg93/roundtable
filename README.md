@@ -48,6 +48,79 @@ The core is UI-agnostic and embeddable into any frontend, Node.js service, or ex
 
 ---
 
+## 🔌 Pluggable Library Usage (Embedding in Your Projects)
+
+Roundtable is designed as an unopinionated, pluggable library. You can pull it directly into any Node.js backend, microservice, CLI, or React frontend:
+
+### 1. Headless Node.js Deliberation (No UI required)
+
+```typescript
+import {
+  createDeliberationSession,
+  createAgent,
+} from 'roundtable';
+
+// Configure agents with optional role definitions
+const session = createDeliberationSession({
+  topic: 'Select caching topology for multi-region microservices',
+  agents: [
+    // Role is optional: defaults to an analytical contributor if omitted
+    createAgent({ name: 'Alice', model: 'gpt-4o', provider: 'openai' }),
+    createAgent({ name: 'Bob', model: 'claude-3-5-sonnet-20241022', provider: 'anthropic' }),
+    createAgent({ name: 'Charlie', model: 'llama3.2', provider: 'ollama' }), // Local LLM!
+  ],
+});
+
+// Stream real-time tokens to terminal or websocket
+session.on('token', ({ chunk }) => process.stdout.write(chunk));
+
+// Run deliberation automatically
+await session.run({ maxRounds: 3 });
+
+// Extract structured conclusions & action items
+const { nextSteps } = await session.summarize();
+console.log('Decisions:', nextSteps.decisions);
+console.log('Action Items:', nextSteps.actionItems);
+```
+
+### 2. Embed into Any React Application
+
+```tsx
+import React from 'react';
+import { GroupChat } from 'roundtable';
+
+export function DeliberationPanel() {
+  return (
+    <div className="w-full h-screen">
+      <GroupChat />
+    </div>
+  );
+}
+```
+
+### 3. Custom Provider Adapter
+
+```typescript
+import { ProviderAdapter, defaultProviderRegistry } from 'roundtable';
+
+class MyInternalGPUAdapter implements ProviderAdapter {
+  readonly id = 'internal-cluster';
+  readonly name = 'On-Premises GPU Cluster';
+  readonly capabilities = { streaming: true, supportsSystemPrompt: true, defaultContextWindow: 32768 };
+
+  async *generate(request, signal) {
+    // Call your own internal inference API
+    yield { text: 'Cluster response chunk...' };
+  }
+  async listModels() { return [{ id: 'cluster-70b', name: 'Cluster 70B', contextWindow: 32768, supportsStreaming: true }]; }
+  async healthCheck() { return true; }
+}
+
+defaultProviderRegistry.register(new MyInternalGPUAdapter());
+```
+
+---
+
 ## 📁 Repository Structure
 
 ```

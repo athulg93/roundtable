@@ -57,12 +57,18 @@ export class ContextBuilder {
 
     // 2. Assemble System Prompt with explicit persona and participant roster
     const participantsList = participants
-      .map((p) => `- ${p.name} (${p.role === 'moderator' ? 'Moderator' : 'Participant'}): ${p.rolePrompt.slice(0, 120)}...`)
+      .map((p) => {
+        const desc = (p.rolePrompt || 'Analytical deliberation participant').slice(0, 120);
+        return `- ${p.name} (${p.role === 'moderator' ? 'Moderator' : 'Participant'}): ${desc}...`;
+      })
       .join('\n');
+
+    const effectiveRolePrompt = agent.rolePrompt?.trim() ||
+      'You are a thoughtful, analytical contributor. Provide clear reasoning, evaluate trade-offs, and advance the discussion constructively.';
 
     let systemPrompt = [
       `You are ${agent.name}.`,
-      `Your Persona / Instructions:\n${agent.rolePrompt}`,
+      `Your Persona / Instructions:\n${effectiveRolePrompt}`,
       `Discussion Topic / Goal:\n${group.goal}`,
       `Group Participants:\n${participantsList}`,
       `Execution Rules:`,
@@ -78,7 +84,7 @@ export class ContextBuilder {
 
     if (remainingBudget <= 0) {
       // Emergency truncation of instructions if system prompt is somehow massive
-      systemPrompt = `You are ${agent.name}. Topic: ${group.goal}. Role: ${agent.rolePrompt.slice(0, 200)}`;
+      systemPrompt = `You are ${agent.name}. Topic: ${group.goal}. Role: ${effectiveRolePrompt.slice(0, 200)}`;
       remainingBudget = availableInputBudget - this.tokenEstimator.estimate(systemPrompt);
     }
 

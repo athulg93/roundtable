@@ -22,7 +22,7 @@ export interface Agent {
   role: AgentRole;
   provider: string; // 'mock' | 'openai-compatible' | 'anthropic' | 'gemini'
   model: string;
-  rolePrompt: string; // system prompt defining expertise & perspective
+  rolePrompt?: string; // system prompt defining expertise & perspective (optional)
   temperature: number;
   maxOutputTokens: number;
   contextBudget: number; // total token budget for prompt + output
