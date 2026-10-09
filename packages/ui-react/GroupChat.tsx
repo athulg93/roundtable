@@ -17,6 +17,9 @@ import { BranchTreeVisualizer } from './BranchTreeVisualizer.tsx';
 import { DissentLogView } from './DissentLogView.tsx';
 import { EventLogView } from './EventLogView.tsx';
 import { TestHarness } from './TestHarness.tsx';
+import { ToolsView } from './ToolsView.tsx';
+import { TemplateGalleryModal } from './TemplateGalleryModal.tsx';
+import { defaultVSCodeHost } from '../embed/vscodeHost.ts';
 import { LocalStorageAdapter } from '../storage/localStorage.ts';
 import { defaultProviderRegistry } from '../providers/registry.ts';
 import {
@@ -28,6 +31,7 @@ import {
   Scale,
   EyeOff,
   Sparkles,
+  Wrench,
 } from 'lucide-react';
 
 export interface GroupChatProps {
@@ -37,8 +41,9 @@ export interface GroupChatProps {
 export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
   const [session, setSession] = useState<GroupChatSession | null>(initialSession || null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [activeRightTab, setActiveRightTab] = useState<
-    'blackboard' | 'branches' | 'dissent' | 'events' | 'harness'
+    'blackboard' | 'branches' | 'dissent' | 'tools' | 'events' | 'harness'
   >('blackboard');
   const [, setTick] = useState(0);
 
@@ -91,6 +96,8 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
       onSwitchSession={handleSwitchSession}
       showSummaryModal={showSummaryModal}
       setShowSummaryModal={setShowSummaryModal}
+      showGalleryModal={showGalleryModal}
+      setShowGalleryModal={setShowGalleryModal}
       activeRightTab={activeRightTab}
       setActiveRightTab={setActiveRightTab}
       onForceRefresh={() => setTick((t) => t + 1)}
@@ -104,8 +111,10 @@ interface GroupChatCockpitProps {
   onSwitchSession: (session: GroupChatSession) => void;
   showSummaryModal: boolean;
   setShowSummaryModal: (show: boolean) => void;
-  activeRightTab: 'blackboard' | 'branches' | 'dissent' | 'events' | 'harness';
-  setActiveRightTab: (tab: 'blackboard' | 'branches' | 'dissent' | 'events' | 'harness') => void;
+  showGalleryModal: boolean;
+  setShowGalleryModal: (show: boolean) => void;
+  activeRightTab: 'blackboard' | 'branches' | 'dissent' | 'tools' | 'events' | 'harness';
+  setActiveRightTab: (tab: 'blackboard' | 'branches' | 'dissent' | 'tools' | 'events' | 'harness') => void;
   onForceRefresh: () => void;
 }
 
@@ -115,12 +124,20 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
   onSwitchSession,
   showSummaryModal,
   setShowSummaryModal,
+  showGalleryModal,
+  setShowGalleryModal,
   activeRightTab,
   setActiveRightTab,
   onForceRefresh,
 }) => {
   const chat = useGroupChat(session);
   const [blindRunning, setBlindRunning] = useState(false);
+
+  // Attach VS Code / embed host bridge
+  React.useEffect(() => {
+    const detach = defaultVSCodeHost.attachSession(session);
+    return () => detach();
+  }, [session]);
 
   const handleSummarize = async () => {
     await chat.summarize();
@@ -256,8 +273,29 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveRightTab('tools')}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium transition ${
+              activeRightTab === 'tools'
+                ? 'bg-blue-950/60 border-blue-500/60 text-blue-300'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            <span>Tools</span>
+          </button>
+
+          <button
+            onClick={() => setShowGalleryModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-300 font-medium transition ml-1"
+            title="Open Deliberation Template Gallery"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Gallery</span>
+          </button>
+
+          <button
             onClick={onReset}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition ml-1"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition ml-0.5"
           >
             <Settings className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Setup</span>
@@ -350,6 +388,10 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
             </div>
           )}
 
+          {activeRightTab === 'tools' && (
+            <ToolsView onRunTool={chat.executeTool} />
+          )}
+
           {activeRightTab === 'harness' && (
             <div className="flex-1 overflow-hidden p-3 bg-slate-950 flex flex-col">
               <TestHarness session={session} onRefreshView={onForceRefresh} />
@@ -363,6 +405,22 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
         <SummaryView
           conversation={chat.conversation}
           onClose={() => setShowSummaryModal(false)}
+        />
+      )}
+
+      {/* Deliberation Template Gallery Modal */}
+      {showGalleryModal && (
+        <TemplateGalleryModal
+          onClose={() => setShowGalleryModal(false)}
+          onApplyTemplate={(grp, ags) => {
+            const newSession = createGroupChat({
+              group: grp,
+              agents: ags,
+              providerRegistry: session.providers,
+              storage: session.storage,
+            });
+            onSwitchSession(newSession);
+          }}
         />
       )}
     </div>

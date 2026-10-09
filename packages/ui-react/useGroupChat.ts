@@ -39,6 +39,7 @@ export interface UseGroupChatReturn {
   addBlackboardItem: (category: 'decision' | 'hypothesis' | 'assumption' | 'open_question', text: string) => Promise<void>;
   resolveBlackboardItem: (itemId: string, status: 'resolved' | 'rejected', reason?: string) => Promise<void>;
   logDissent: (objection: string, topic?: string) => Promise<void>;
+  executeTool: (toolName: string, args: Record<string, any>) => Promise<any>;
 }
 
 export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
@@ -134,6 +135,10 @@ export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
     (objection: string, topic?: string) => sessionRef.current.logDissent(objection, topic),
     []
   );
+  const executeTool = useCallback(
+    (toolName: string, args: Record<string, any>) => sessionRef.current.executeTool(toolName, args),
+    []
+  );
 
   return {
     session,
@@ -159,5 +164,6 @@ export function useGroupChat(session: GroupChatSession): UseGroupChatReturn {
     addBlackboardItem,
     resolveBlackboardItem,
     logDissent,
+    executeTool,
   };
 }

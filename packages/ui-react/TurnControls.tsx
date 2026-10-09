@@ -18,7 +18,10 @@ import {
   Zap,
   GitBranch,
   EyeOff,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
+import { defaultVoiceEngine } from './speechSynthesis.ts';
 
 export interface TurnControlsProps {
   conversation: Conversation;
@@ -55,6 +58,7 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
 }) => {
   const [interjectText, setInterjectText] = useState('');
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('');
+  const [voiceEnabled, setVoiceEnabled] = useState(defaultVoiceEngine.enabled);
 
   const participants = Object.values(conversation.agentSnapshots).filter(
     (a) => a.role === 'participant'
@@ -211,6 +215,34 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {defaultVoiceEngine.isSupported() && (
+            <button
+              onClick={() => {
+                const nextVal = !voiceEnabled;
+                defaultVoiceEngine.enabled = nextVal;
+                setVoiceEnabled(nextVal);
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                voiceEnabled
+                  ? 'bg-cyan-950/60 border-cyan-700 text-cyan-300'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title={voiceEnabled ? 'Disable speech synthesis' : 'Enable speech synthesis for agent turns'}
+            >
+              {voiceEnabled ? (
+                <>
+                  <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                  <span>Voice ON</span>
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span>Voice</span>
+                </>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onSummarize}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-colors shadow-sm"

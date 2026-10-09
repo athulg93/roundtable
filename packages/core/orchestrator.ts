@@ -43,6 +43,7 @@ import { PROTOCOL_PRESETS } from '../reasoning/protocols.ts';
 import { forkConversation, BranchInfo } from '../reasoning/branching.ts';
 import { executeBlindRound as runBlindRound, BlindStance } from '../reasoning/blindDeliberation.ts';
 import { defaultTieredDispatcher } from '../reasoning/tieredDispatcher.ts';
+import { defaultToolRegistry, extractToolCalls } from '../tools/index.ts';
 
 export type SessionEventListener = (event: any) => void;
 
@@ -537,6 +538,28 @@ export class GroupChatSession {
         });
       }
 
+      // Phase 3: Extract and execute tool calls
+      const toolCalls = extractToolCalls(accumulatedText, agent.id, agent.name);
+      for (const call of toolCalls) {
+        const toolRes = await defaultToolRegistry.execute(call.toolName, call.args, {
+          agentId: agent.id,
+          agentName: agent.name,
+          conversationId: this.state.id,
+        });
+        await this.appendEvent({
+          type: 'tool.executed',
+          payload: {
+            turnId,
+            toolCallId: toolRes.toolCallId,
+            toolName: toolRes.toolName,
+            args: call.args,
+            output: toolRes.output,
+            isError: toolRes.isError,
+            executionMs: toolRes.executionMs,
+          },
+        });
+      }
+
       this.consecutiveFailures = 0;
       return this.state.turns.find((t) => t.id === turnId) || null;
     } catch (err: any) {
@@ -781,6 +804,40 @@ export class GroupChatSession {
       type: 'dissent.logged',
       payload: { dissent },
     });
+  }
+
+  /**
+   * Executes a tool explicitly against the current conversation.
+   */
+  async executeTool(
+    toolName: string,
+    args: Record<string, any>,
+    agentId = 'user',
+    agentName = 'User'
+  ): Promise<import('../tools/types.ts').ToolResult> {
+    const res = await defaultToolRegistry.execute(toolName, args, {
+      agentId,
+      agentName,
+      conversationId: this.state.id,
+    });
+
+    const activeTurn = this.state.turns[this.state.turns.length - 1];
+    const turnId = activeTurn ? activeTurn.id : 'manual-tool-turn';
+
+    await this.appendEvent({
+      type: 'tool.executed',
+      payload: {
+        turnId,
+        toolCallId: res.toolCallId,
+        toolName: res.toolName,
+        args,
+        output: res.output,
+        isError: res.isError,
+        executionMs: res.executionMs,
+      },
+    });
+
+    return res;
   }
 }
 

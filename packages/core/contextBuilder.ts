@@ -6,6 +6,7 @@
 
 import { Agent, Conversation, Group, Turn } from './types.ts';
 import { TokenEstimator, defaultTokenEstimator } from './tokenEstimator.ts';
+import { defaultToolRegistry } from '../tools/registry.ts';
 
 export interface FormattedMessage {
   role: 'system' | 'user' | 'assistant';
@@ -70,7 +71,7 @@ export class ContextBuilder {
     const effectiveRolePrompt = agent.rolePrompt?.trim() ||
       'You are a thoughtful, analytical contributor. Provide clear reasoning, evaluate trade-offs, and advance the discussion constructively.';
 
-    let systemPrompt = [
+    const promptParts = [
       `You are ${agent.name}.`,
       `Your Persona / Instructions:\n${effectiveRolePrompt}`,
       `Discussion Topic / Goal:\n${group.goal}`,
@@ -81,7 +82,14 @@ export class ContextBuilder {
       `- DO NOT prepend your response with your name (e.g. do not output "${agent.name}: ...").`,
       `- NEVER impersonate, pretend to be, or fabricate turns for other participants.`,
       `- Keep answers focused, substantive, and address the discussion topic.`,
-    ].join('\n\n');
+    ];
+
+    const toolsPrompt = defaultToolRegistry.getDeclarationsPrompt();
+    if (toolsPrompt) {
+      promptParts.push(toolsPrompt);
+    }
+
+    let systemPrompt = promptParts.join('\n\n');
 
     const systemPromptTokens = this.tokenEstimator.estimate(systemPrompt);
     let remainingBudget = availableInputBudget - systemPromptTokens;

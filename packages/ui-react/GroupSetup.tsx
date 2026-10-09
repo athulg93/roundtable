@@ -13,6 +13,7 @@ import {
 import { createConfiguredAdapter } from '../providers/factory.ts';
 import { ProviderAdapter } from '../providers/types.ts';
 import { DeveloperGuideModal } from './DeveloperGuideModal.tsx';
+import { TemplateGalleryModal } from './TemplateGalleryModal.tsx';
 import {
   Bot,
   Shield,
@@ -165,10 +166,33 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
   const [connections, setConnections] = useState<Record<string, AgentConnectionState>>(INITIAL_CONNECTIONS);
   const [showDevGuide, setShowDevGuide] = useState(false);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
 
   const handleApplyPreset = (index: number) => {
     setGroupName(PRESET_TOPICS[index].name);
     setGoal(PRESET_TOPICS[index].goal);
+  };
+
+  const handleApplyGalleryTemplate = (grp: Group, ags: Record<string, Agent>) => {
+    setGroupName(grp.name);
+    setGoal(grp.goal);
+    if (grp.protocol) setProtocol(grp.protocol);
+    if (grp.speakerPolicy) setSpeakerPolicy(grp.speakerPolicy);
+    if (grp.terminationPolicy) setTerminationPolicy(grp.terminationPolicy);
+    if (grp.maxRounds) setMaxRounds(grp.maxRounds);
+    setModeratorId(grp.moderatorId);
+    setAgents(Object.values(ags));
+    const newConns: Record<string, AgentConnectionState> = {};
+    for (const a of Object.values(ags)) {
+      newConns[a.id] = {
+        providerType: 'mock',
+        baseUrl: '',
+        apiKey: '',
+        showApiKey: false,
+        testing: false,
+      };
+    }
+    setConnections(newConns);
   };
 
   const handleAddAgent = () => {
@@ -387,7 +411,14 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
               onClick={() => setShowDevGuide(true)}
               className="text-[11px] px-2.5 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 font-semibold transition-colors flex items-center gap-1 shadow-xs"
             >
-              <Code className="w-3 h-3 text-cyan-400" /> Pluggable API Guide
+              <Code className="w-3 h-3 text-cyan-400" /> API Guide
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowGalleryModal(true)}
+              className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700 text-indigo-300 font-semibold transition-colors flex items-center gap-1 shadow-xs"
+            >
+              <Sparkles className="w-3 h-3 text-cyan-400" /> Preset Gallery
             </button>
             {PRESET_TOPICS.map((p, idx) => (
               <button
@@ -918,6 +949,14 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
 
       {/* Pluggable Integration Guide Modal */}
       {showDevGuide && <DeveloperGuideModal onClose={() => setShowDevGuide(false)} />}
+
+      {/* Preset Deliberation Template Gallery Modal */}
+      {showGalleryModal && (
+        <TemplateGalleryModal
+          onClose={() => setShowGalleryModal(false)}
+          onApplyTemplate={handleApplyGalleryTemplate}
+        />
+      )}
     </div>
   );
 };

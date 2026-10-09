@@ -102,6 +102,7 @@ export interface Turn {
   startedAt: number;
   completedAt?: number;
   createdAt?: number;
+  toolCalls?: Array<{ toolName: string; args: Record<string, any>; output: string; isError?: boolean; executionMs?: number }>;
   effectiveConfig?: Record<string, unknown>;
 }
 
@@ -190,6 +191,7 @@ export type ConversationEventType =
   | 'conversation.forked'
   | 'dissent.logged'
   | 'stall.detected'
+  | 'tool.executed'
   | 'conversation.ended';
 
 export interface BaseEvent {
@@ -324,6 +326,19 @@ export interface StallDetectedEvent extends BaseEvent {
   };
 }
 
+export interface ToolExecutedEvent extends BaseEvent {
+  type: 'tool.executed';
+  payload: {
+    turnId: string;
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, any>;
+    output: string;
+    isError: boolean;
+    executionMs: number;
+  };
+}
+
 export interface ConversationEndedEvent extends BaseEvent {
   type: 'conversation.ended';
   payload: {
@@ -346,6 +361,7 @@ export type ConversationEvent =
   | ConversationForkedEvent
   | DissentLoggedEvent
   | StallDetectedEvent
+  | ToolExecutedEvent
   | ConversationEndedEvent;
 
 export interface Conversation {

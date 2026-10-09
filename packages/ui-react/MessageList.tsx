@@ -6,7 +6,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Conversation, Turn } from '../core/types.ts';
-import { Bot, User, Shield, AlertTriangle, CornerDownRight, CheckCircle2, Clock } from 'lucide-react';
+import { Bot, User, Shield, AlertTriangle, CornerDownRight, CheckCircle2, Clock, Wrench, Volume2 } from 'lucide-react';
+import { defaultVoiceEngine } from './speechSynthesis.ts';
 
 export interface MessageListProps {
   conversation: Conversation;
@@ -124,8 +125,17 @@ export const MessageList: React.FC<MessageListProps> = ({
                 </div>
               </div>
 
-              {/* Model & Usage Badges */}
+              {/* Model, Audio & Usage Badges */}
               <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                {textContent && (
+                  <button
+                    onClick={() => defaultVoiceEngine.speak(textContent, agent)}
+                    className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+                    title={`Read aloud turn as ${turn.speakerName}`}
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 {!isUser && (
                   <span className="bg-slate-800/80 px-2 py-0.5 rounded text-slate-400 font-mono text-[10px]">
                     {turn.selectedModel}
@@ -152,6 +162,36 @@ export const MessageList: React.FC<MessageListProps> = ({
                 ) : null
               )}
             </div>
+
+            {/* Grounded Tool Executions */}
+            {turn.toolCalls && turn.toolCalls.length > 0 && (
+              <div className="mt-3 space-y-1.5 border-t border-slate-800/80 pt-2.5">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Wrench className="w-3 h-3 text-cyan-400" />
+                  <span>Grounded Tool Executions ({turn.toolCalls.length})</span>
+                </span>
+                <div className="space-y-1.5">
+                  {turn.toolCalls.map((tc, tcIdx) => (
+                    <div
+                      key={tcIdx}
+                      className="p-2.5 rounded bg-slate-950/80 border border-slate-800 text-xs font-mono"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-cyan-300">
+                        <span>[Tool: {tc.toolName}]</span>
+                        {tc.executionMs !== undefined && (
+                          <span className="text-[10px] text-slate-500 tabular-nums">
+                            {tc.executionMs}ms
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed">
+                        {tc.output}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Error or Skipped Status Notice */}
             {turn.status === 'failed' && turn.error && (

@@ -330,6 +330,37 @@ export function reduceConversation(
       };
     }
 
+    // --- Phase 3: Tool Executed ---
+    case 'tool.executed': {
+      if (!state) throw new Error('Cannot apply tool.executed before conversation.created');
+      const updatedTurns = state.turns.map((t) => {
+        if (t.id === event.payload.turnId) {
+          const currentCalls = t.toolCalls || [];
+          return {
+            ...t,
+            toolCalls: [
+              ...currentCalls,
+              {
+                toolName: event.payload.toolName,
+                args: event.payload.args,
+                output: event.payload.output,
+                isError: event.payload.isError,
+                executionMs: event.payload.executionMs,
+              },
+            ],
+          };
+        }
+        return t;
+      });
+
+      return {
+        ...state,
+        turns: updatedTurns,
+        events: [...state.events, event],
+        updatedAt: event.timestamp,
+      };
+    }
+
     case 'conversation.ended': {
       if (!state) throw new Error('Cannot apply conversation.ended before conversation.created');
       return {

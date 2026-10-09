@@ -10,3 +10,6 @@ export * from './DeveloperGuideModal.tsx';
 export * from './BlackboardView.tsx';
 export * from './BranchTreeVisualizer.tsx';
 export * from './DissentLogView.tsx';
+export * from './ToolsView.tsx';
+export * from './TemplateGalleryModal.tsx';
+export * from './speechSynthesis.ts';
