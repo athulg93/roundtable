@@ -145,7 +145,7 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
               onChange={(e) => setSelectedSpeakerId(e.target.value)}
               className="bg-transparent text-slate-300 text-xs px-2 py-1.5 rounded outline-none cursor-pointer"
             >
-              <option value="">Policy Selected Speaker</option>
+              <option value="">{conversation.groupSnapshot.moderatorId === 'user' ? 'Next in Round-Robin' : 'Policy Selected Speaker'}</option>
               {participants.map((p) => (
                 <option key={p.id} value={p.id}>
                   Manual: {p.name}
@@ -154,10 +154,10 @@ export const TurnControls: React.FC<TurnControlsProps> = ({
             </select>
             <button
               onClick={handleStep}
-              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-semibold transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-semibold transition-colors"
             >
               <StepForward className="w-3.5 h-3.5" />
-              Step Turn
+              {conversation.groupSnapshot.moderatorId === 'user' ? 'Advance Turn' : 'Step Turn'}
             </button>
           </div>
         )}

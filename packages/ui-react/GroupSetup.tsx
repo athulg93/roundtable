@@ -29,6 +29,8 @@ import {
   ExternalLink,
   RefreshCw,
   Code,
+  User,
+  Info,
 } from 'lucide-react';
 
 export interface GroupSetupProps {
@@ -158,13 +160,15 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
   const [goal, setGoal] = useState(PRESET_TOPICS[0].goal);
   const [protocol, setProtocol] = useState<DeliberationProtocol>('blind-first');
   const [tierScheduling, setTierScheduling] = useState(true);
-  const [speakerPolicy, setSpeakerPolicy] = useState<SpeakerSelectionPolicy>('moderator-directed');
-  const [terminationPolicy, setTerminationPolicy] = useState<TerminationPolicy>('moderator-conclusion');
+  const [moderationMode, setModerationMode] = useState<'human' | 'agent'>('human');
+  const [agentModeratorId, setAgentModeratorId] = useState('agent-moderator');
+  const [speakerPolicy, setSpeakerPolicy] = useState<SpeakerSelectionPolicy>('round-robin');
+  const [terminationPolicy, setTerminationPolicy] = useState<TerminationPolicy>('max-rounds');
   const [maxRounds, setMaxRounds] = useState(5);
   const [maxTokens, setMaxTokens] = useState(50000);
-  const [moderatorId, setModeratorId] = useState('agent-moderator');
   const [agents, setAgents] = useState<Agent[]>(INITIAL_AGENTS);
   const [connections, setConnections] = useState<Record<string, AgentConnectionState>>(INITIAL_CONNECTIONS);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showDevGuide, setShowDevGuide] = useState(false);
   const [showGalleryModal, setShowGalleryModal] = useState(false);
 
@@ -180,7 +184,12 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
     if (grp.speakerPolicy) setSpeakerPolicy(grp.speakerPolicy);
     if (grp.terminationPolicy) setTerminationPolicy(grp.terminationPolicy);
     if (grp.maxRounds) setMaxRounds(grp.maxRounds);
-    setModeratorId(grp.moderatorId);
+    if (grp.moderatorId === 'user') {
+      setModerationMode('human');
+    } else {
+      setModerationMode('agent');
+      setAgentModeratorId(grp.moderatorId);
+    }
     setAgents(Object.values(ags));
     const newConns: Record<string, AgentConnectionState> = {};
     for (const a of Object.values(ags)) {
@@ -234,8 +243,8 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
     const updatedConns = { ...connections };
     delete updatedConns[id];
     setConnections(updatedConns);
-    if (moderatorId === id) {
-      setModeratorId(filtered[0]?.id || '');
+    if (agentModeratorId === id) {
+      setAgentModeratorId(filtered[0]?.id || '');
     }
   };
 
@@ -328,11 +337,33 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!groupName.trim() || !goal.trim()) {
-      alert('Please provide a group name and discussion goal.');
+    setValidationErrors([]);
+
+    const errors: string[] = [];
+    if (!groupName.trim()) errors.push('Please enter a group name.');
+    if (!goal.trim()) errors.push('Please specify a deliberation goal or discussion topic.');
+    if (agents.length < 2) errors.push('A group must have at least 2 participant agents.');
+
+    // Validate required credentials & configurations
+    for (const a of agents) {
+      const conn = connections[a.id];
+      const preset = PROVIDER_PRESETS[conn?.providerType || 'mock'];
+      if (!a.name.trim()) errors.push(`Agent '${a.id}' requires a display name.`);
+      if (!a.model.trim()) errors.push(`Agent '${a.name || a.id}' requires a model name.`);
+      if (preset.requiresApiKey && !conn?.apiKey?.trim()) {
+        errors.push(`Agent '${a.name}' (${preset.label}) requires an API key.`);
+      }
+      if ((conn?.providerType === 'ollama' || conn?.providerType === 'lmstudio') && !conn?.baseUrl?.trim()) {
+        errors.push(`Agent '${a.name}' (${preset.label}) requires a local server Base URL.`);
+      }
+    }
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
       return;
     }
 
+    const effectiveModeratorId = moderationMode === 'human' ? 'user' : agentModeratorId;
     const agentsMap: Record<string, Agent> = {};
     const adaptersMap: Record<string, ProviderAdapter> = {};
 
@@ -358,7 +389,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       agentsMap[a.id] = {
         ...a,
         provider: adapterId,
-        role: a.id === moderatorId ? 'moderator' : 'participant',
+        role: effectiveModeratorId === a.id ? 'moderator' : 'participant',
       };
     }
 
@@ -367,7 +398,7 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
       name: groupName.trim(),
       goal: goal.trim(),
       agentIds: agents.map((a) => a.id),
-      moderatorId,
+      moderatorId: effectiveModeratorId,
       speakerPolicy,
       terminationPolicy,
       protocol,
@@ -441,36 +472,110 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
             <Sliders className="w-4 h-4 text-cyan-400" /> Group Objective & Policies
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Group Name</label>
-              <input
-                type="text"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
-                required
-              />
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">Group Name</label>
+            <input
+              type="text"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+              required
+            />
+          </div>
+
+          {/* Moderation Mode Selector */}
+          <div className="space-y-2 pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-300">
+                Deliberation Moderation
+              </label>
+              <span className="text-[11px] text-cyan-400 font-mono">
+                {moderationMode === 'human' ? '👤 Human Controlled' : '🛡️ Autonomous AI Facilitator'}
+              </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Assigned Moderator</label>
-              <select
-                value={moderatorId}
-                onChange={(e) => setModeratorId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setModerationMode('human');
+                  setSpeakerPolicy('round-robin');
+                  setTerminationPolicy('max-rounds');
+                }}
+                className={`text-left p-3.5 rounded-xl border transition ${
+                  moderationMode === 'human'
+                    ? 'border-cyan-500 bg-cyan-950/30 ring-1 ring-cyan-500/40'
+                    : 'border-slate-800/80 bg-slate-950/60 hover:border-slate-700'
+                }`}
               >
-                {agents.map((a) => {
-                  const conn = connections[a.id];
-                  const providerLabel = conn ? PROVIDER_PRESETS[conn.providerType].label : a.provider;
-                  return (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({providerLabel} / {a.model})
-                    </option>
-                  );
-                })}
-              </select>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 flex items-center justify-center">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-200">Human Moderator (You)</span>
+                  {moderationMode === 'human' && (
+                    <span className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  You facilitate the deliberation. Advance speakers turn-by-turn, interject thoughts, steer topics, and pause or stop whenever you choose.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setModerationMode('agent');
+                  setSpeakerPolicy('moderator-directed');
+                  setTerminationPolicy('moderator-conclusion');
+                }}
+                className={`text-left p-3.5 rounded-xl border transition ${
+                  moderationMode === 'agent'
+                    ? 'border-purple-500 bg-purple-950/30 ring-1 ring-purple-500/40'
+                    : 'border-slate-800/80 bg-slate-950/60 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-5 h-5 rounded bg-purple-500/20 text-purple-300 flex items-center justify-center">
+                    <Shield className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-semibold text-slate-200">AI Agent Facilitator</span>
+                  {moderationMode === 'agent' && (
+                    <span className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Designate an AI model to evaluate contributions, select who speaks next, and synthesize when discussion concludes. Strictly constrained by max rounds and stop controls.
+                </p>
+              </button>
             </div>
+
+            {moderationMode === 'agent' && (
+              <div className="mt-2 p-3 rounded-lg border border-purple-900/40 bg-purple-950/20 space-y-1.5">
+                <label className="block text-[11px] font-medium text-purple-300">
+                  Select Facilitating Agent
+                </label>
+                <select
+                  value={agentModeratorId}
+                  onChange={(e) => setAgentModeratorId(e.target.value)}
+                  className="w-full bg-slate-950 border border-purple-800/60 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-400 cursor-pointer"
+                >
+                  {agents.map((a) => {
+                    const conn = connections[a.id];
+                    const providerLabel = conn ? PROVIDER_PRESETS[conn.providerType].label : a.provider;
+                    return (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({providerLabel} / {a.model})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -654,9 +759,17 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
             </button>
           </div>
 
+          {/* Credential Privacy Guarantee */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-[11px] text-emerald-300">
+            <Shield className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong className="text-emerald-200">Volatile In-Memory Credentials Guarantee:</strong> API keys are kept strictly in browser session memory. They are never written to disk, persistent browser storage (localStorage), or conversation event logs, and are completely excluded from JSON and Markdown exports.
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {agents.map((agent) => {
-              const isMod = agent.id === moderatorId;
+              const isMod = moderationMode === 'agent' && agent.id === agentModeratorId;
               const conn = connections[agent.id] || {
                 providerType: 'mock' as SupportedProviderType,
                 baseUrl: '',
@@ -691,18 +804,20 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {isMod ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                          MODERATOR
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setModeratorId(agent.id)}
-                          className="text-[10px] px-2 py-0.5 rounded text-slate-500 hover:text-purple-300 hover:bg-purple-950/40"
-                        >
-                          Make Moderator
-                        </button>
+                      {moderationMode === 'agent' && (
+                        isMod ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            FACILITATOR
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setAgentModeratorId(agent.id)}
+                            className="text-[10px] px-2 py-0.5 rounded text-slate-500 hover:text-purple-300 hover:bg-purple-950/40"
+                          >
+                            Make Facilitator
+                          </button>
+                        )
                       )}
 
                       {agents.length > 2 && (
@@ -789,12 +904,22 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
                       </div>
                     )}
 
+                    {/* OpenAI Platform vs ChatGPT Subscription Clarification */}
+                    {conn.providerType === 'openai' && (
+                      <div className="text-[10px] text-cyan-300/90 bg-cyan-950/40 border border-cyan-800/50 p-2.5 rounded-lg leading-relaxed flex items-start gap-2">
+                        <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-cyan-400" />
+                        <div>
+                          <strong className="text-cyan-200">OpenAI Platform API:</strong> ChatGPT models are accessed through the OpenAI developer API. A consumer ChatGPT Plus/Pro subscription does not grant API access; an OpenAI API key with credit balance is required.
+                        </div>
+                      </div>
+                    )}
+
                     {/* API Key Input (if applicable) */}
                     {preset.requiresApiKey && (
                       <div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
                           <span>API Key</span>
-                          <span className="text-[9px] text-emerald-400">Client-side only (never saved to logs)</span>
+                          <span className="text-[9px] text-emerald-400 font-mono">Volatile session RAM only</span>
                         </div>
                         <div className="relative">
                           <input
@@ -935,6 +1060,21 @@ export const GroupSetup: React.FC<GroupSetupProps> = ({ onStartSession }) => {
             })}
           </div>
         </div>
+
+        {/* Validation Errors Notice */}
+        {validationErrors.length > 0 && (
+          <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 space-y-1.5 shadow-sm">
+            <div className="flex items-center gap-1.5 font-semibold text-rose-200">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              Please correct the following issues to start deliberation:
+            </div>
+            <ul className="list-disc list-inside space-y-0.5 text-[11px] text-rose-300/90 pl-1">
+              {validationErrors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Start Button */}
         <div className="flex items-center justify-end gap-3 pt-2">

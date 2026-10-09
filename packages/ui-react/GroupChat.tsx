@@ -165,6 +165,8 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
   const branchName = chat.conversation.branch?.branchName || 'main';
   const blackboardItems = Object.values(chat.conversation.blackboard?.items || {});
   const dissentCount = chat.conversation.dissentLog?.length || 0;
+  const isHumanMod = chat.conversation.groupSnapshot.moderatorId === 'user';
+  const modAgent = !isHumanMod ? chat.conversation.agentSnapshots[chat.conversation.groupSnapshot.moderatorId] : null;
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
@@ -182,6 +184,15 @@ const GroupChatCockpit: React.FC<GroupChatCockpitProps> = ({
           </div>
 
           <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 border-l border-slate-800 pl-3">
+            <span>
+              Moderator:{' '}
+              {isHumanMod ? (
+                <span className="text-cyan-300 font-mono font-medium">👤 You (Human)</span>
+              ) : (
+                <span className="text-purple-300 font-mono font-medium">🛡️ {modAgent?.name || 'AI Facilitator'}</span>
+              )}
+            </span>
+            <span>·</span>
             <span>
               Protocol:{' '}
               <span className="text-cyan-300 font-mono font-medium capitalize">

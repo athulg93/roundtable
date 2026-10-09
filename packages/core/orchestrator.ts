@@ -54,6 +54,7 @@ export interface GroupChatSessionConfig {
   providerRegistry?: ProviderRegistry;
   storage?: StorageAdapter;
   summarizerModel?: string;
+  autoExecuteTools?: boolean;
 }
 
 export class GroupChatSession {
@@ -69,11 +70,13 @@ export class GroupChatSession {
   readonly storage: StorageAdapter;
   readonly contextBuilder = new ContextBuilder();
   readonly summarizerModel: string;
+  readonly autoExecuteTools: boolean;
 
   constructor(config: GroupChatSessionConfig) {
     this.providers = config.providerRegistry || defaultProviderRegistry;
     this.storage = config.storage || new MemoryStorageAdapter();
     this.summarizerModel = config.summarizerModel || 'mock-fast';
+    this.autoExecuteTools = config.autoExecuteTools ?? false;
 
     if (config.initialEvents && config.initialEvents.length > 0) {
       // Replay existing events
@@ -538,26 +541,30 @@ export class GroupChatSession {
         });
       }
 
-      // Phase 3: Extract and execute tool calls
+      // Phase 1 MVP Tool Policy:
+      // Do not execute model-requested tools automatically. Tools are disabled in MVP
+      // unless explicitly needed; consequential actions require explicit user approval.
       const toolCalls = extractToolCalls(accumulatedText, agent.id, agent.name);
-      for (const call of toolCalls) {
-        const toolRes = await defaultToolRegistry.execute(call.toolName, call.args, {
-          agentId: agent.id,
-          agentName: agent.name,
-          conversationId: this.state.id,
-        });
-        await this.appendEvent({
-          type: 'tool.executed',
-          payload: {
-            turnId,
-            toolCallId: toolRes.toolCallId,
-            toolName: toolRes.toolName,
-            args: call.args,
-            output: toolRes.output,
-            isError: toolRes.isError,
-            executionMs: toolRes.executionMs,
-          },
-        });
+      if (this.autoExecuteTools) {
+        for (const call of toolCalls) {
+          const toolRes = await defaultToolRegistry.execute(call.toolName, call.args, {
+            agentId: agent.id,
+            agentName: agent.name,
+            conversationId: this.state.id,
+          });
+          await this.appendEvent({
+            type: 'tool.executed',
+            payload: {
+              turnId,
+              toolCallId: toolRes.toolCallId,
+              toolName: toolRes.toolName,
+              args: call.args,
+              output: toolRes.output,
+              isError: toolRes.isError,
+              executionMs: toolRes.executionMs,
+            },
+          });
+        }
       }
 
       this.consecutiveFailures = 0;
@@ -646,8 +653,19 @@ export class GroupChatSession {
     participants: Agent[]
   ): Promise<{ nextSpeaker?: string; concluded: boolean; reason: string }> {
     const moderatorId = this.state.groupSnapshot.moderatorId;
-    const moderatorAgent = this.state.agentSnapshots[moderatorId] || participants[0];
     const validIds = participants.map((p) => p.id);
+
+    // If Human is moderator, use predictable default turn order
+    if (moderatorId === 'user') {
+      const lastAgentTurn = [...this.state.turns].reverse().find((t) => t.role === 'agent' || t.role === 'participant');
+      return getDeterministicFallbackDecision(
+        validIds,
+        lastAgentTurn?.speakerId,
+        'Human moderator active: advancing predictable round-robin turn order'
+      );
+    }
+
+    const moderatorAgent = this.state.agentSnapshots[moderatorId] || participants[0];
     const adapter = this.providers.require(moderatorAgent.provider);
 
     const prompt = buildModeratorPrompt(this.state, participants);

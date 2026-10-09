@@ -63,7 +63,7 @@ export const PROVIDER_PRESETS: Record<SupportedProviderType, ProviderPreset> = {
     requiresApiKey: true,
     apiKeyPlaceholder: 'sk-...',
     popularModels: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'gpt-4-turbo'],
-    description: 'Industry-standard frontier models by OpenAI.',
+    description: 'Industry-standard frontier models by OpenAI. Note: ChatGPT models are accessed through the OpenAI Platform API. A ChatGPT Plus subscription does not grant API access; an OpenAI API key with credit balance is required.',
   },
   anthropic: {
     type: 'anthropic',
