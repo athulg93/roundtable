@@ -9,6 +9,8 @@
     "./core": "./packages/core/index.ts",
     "./providers": "./packages/providers/index.ts",
     "./storage": "./packages/storage/index.ts",
+    "./tools": "./packages/tools/index.ts",
+    "./embed": "./packages/embed/index.ts",
     "./react": "./packages/ui-react/index.ts"
   },
   "scripts": {

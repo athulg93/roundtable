@@ -103,59 +103,60 @@ export class MockProvider implements ProviderAdapter {
     // 3. Determine Response Content
     let fullText = '';
     const lastUserMsg = request.messages[request.messages.length - 1]?.content || '';
-    const isModeratorRequest =
-      (request.systemPrompt && request.systemPrompt.includes('Discussion Moderator')) ||
-      lastUserMsg.includes('Select the next speaker');
 
-    if (isModeratorRequest) {
-      const isRepairAttempt = lastUserMsg.includes('could not be validated') || lastUserMsg.includes('repair');
-      const shouldSendMalformed =
-        this.config.alwaysMalformedJson ||
-        ((this.config.malformedJsonAttempts ?? 0) > 0 && !isRepairAttempt);
-
-      if (shouldSendMalformed) {
-        fullText = 'I think Alice should speak next because she knows a lot about this. (INVALID RAW TEXT NOT JSON)';
-      } else {
-        // Extract available participant IDs from message if present
-        const matchIds = lastUserMsg.match(/- ID:\s*"([^"]+)"/g);
-        let targetId = 'agent-1';
-        if (matchIds && matchIds.length > 0) {
-          const first = matchIds[0].replace(/- ID:\s*"/, '').replace(/"/, '');
-          targetId = first;
-        }
-
-        // Conclude if turns > 6 or scripted
-        const turnCountMatch = lastUserMsg.match(/Turn Count:\s*(\d+)/);
-        const currentTurnCount = turnCountMatch ? parseInt(turnCountMatch[1], 10) : 0;
-        if (currentTurnCount >= 6) {
-          fullText = JSON.stringify({
-            concluded: true,
-            reason: 'Sufficient consensus has been reached on key architectural requirements.',
-          });
-        } else {
-          fullText = JSON.stringify({
-            nextSpeaker: targetId,
-            concluded: false,
-            reason: `Advancing perspective on the deliberation topic.`,
-          });
+    // Check custom generator or scripted responses first
+    let foundScript: string | undefined;
+    if (this.config.customGenerator) {
+      foundScript = this.config.customGenerator(request);
+    } else if (this.config.scriptedResponses) {
+      for (const [key, value] of Object.entries(this.config.scriptedResponses)) {
+        if (request.systemPrompt?.includes(key) || lastUserMsg.includes(key)) {
+          foundScript = value;
+          break;
         }
       }
-    } else if (this.config.customGenerator) {
-      fullText = this.config.customGenerator(request);
+    }
+
+    if (foundScript) {
+      fullText = foundScript;
     } else {
-      // Check scripted map
-      let foundScript: string | undefined;
-      if (this.config.scriptedResponses) {
-        for (const [key, value] of Object.entries(this.config.scriptedResponses)) {
-          if (request.systemPrompt?.includes(key) || lastUserMsg.includes(key)) {
-            foundScript = value;
-            break;
+      const isModeratorRequest =
+        (request.systemPrompt && request.systemPrompt.includes('Discussion Moderator')) ||
+        lastUserMsg.includes('Select the next speaker');
+
+      if (isModeratorRequest) {
+        const isRepairAttempt = lastUserMsg.includes('could not be validated') || lastUserMsg.includes('repair');
+        const shouldSendMalformed =
+          this.config.alwaysMalformedJson ||
+          ((this.config.malformedJsonAttempts ?? 0) > 0 && !isRepairAttempt);
+
+        if (shouldSendMalformed) {
+          fullText = 'I think Alice should speak next because she knows a lot about this. (INVALID RAW TEXT NOT JSON)';
+        } else {
+          // Extract available participant IDs from message if present
+          const matchIds = lastUserMsg.match(/- ID:\s*"([^"]+)"/g);
+          let targetId = 'agent-1';
+          if (matchIds && matchIds.length > 0) {
+            const first = matchIds[0].replace(/- ID:\s*"/, '').replace(/"/, '');
+            targetId = first;
+          }
+
+          // Conclude if turns > 6 or scripted
+          const turnCountMatch = lastUserMsg.match(/Turn Count:\s*(\d+)/);
+          const currentTurnCount = turnCountMatch ? parseInt(turnCountMatch[1], 10) : 0;
+          if (currentTurnCount >= 6) {
+            fullText = JSON.stringify({
+              concluded: true,
+              reason: 'Sufficient consensus has been reached on key architectural requirements.',
+            });
+          } else {
+            fullText = JSON.stringify({
+              nextSpeaker: targetId,
+              concluded: false,
+              reason: `Advancing perspective on the deliberation topic.`,
+            });
           }
         }
-      }
-
-      if (foundScript) {
-        fullText = foundScript;
       } else {
         // Default realistic response acknowledging role
         const roleMatch = request.systemPrompt?.match(/You are ([^.\n]+)/);

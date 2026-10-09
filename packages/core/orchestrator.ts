@@ -211,9 +211,10 @@ export class GroupChatSession {
     this.stopRequested = true;
     this.pauseRequested = false;
     if (this.abortController) {
-      this.abortController.abort();
+      this.abortController.abort(new Error('Conversation stopped by user'));
     }
     if (this.state.state !== 'ended') {
+      this.transitionTo('ended', reason);
       this.appendEvent({
         type: 'conversation.ended',
         payload: { reason, finalTurnCount: this.state.totalTurns },
@@ -586,8 +587,8 @@ export class GroupChatSession {
       const normalized = normalizeError(err);
       this.consecutiveFailures++;
 
-      // Check context overflow recovery
-      if (normalized.code === 'context_overflow') {
+      // Check context overflow recovery (finite bound: maxRetries)
+      if (normalized.code === 'context_overflow' && retryCount < maxRetries) {
         const completedTurns = this.state.turns.filter((t) => t.status === 'completed');
         if (completedTurns.length > 2) {
           await this.compressOlderTurns(completedTurns.slice(0, 3));

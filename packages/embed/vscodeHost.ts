@@ -16,13 +16,19 @@ declare global {
   }
 }
 
+export interface VSCodeHostOptions {
+  allowedOrigins?: string[];
+}
+
 export class VSCodeHostAdapter {
   private vscodeApi?: { postMessage: (msg: any) => void };
   private session?: GroupChatSession;
   private messageListener?: (event: MessageEvent) => void;
   private unsubStateChange?: () => void;
+  private allowedOrigins?: string[];
 
-  constructor() {
+  constructor(options: VSCodeHostOptions = {}) {
+    this.allowedOrigins = options.allowedOrigins;
     if (typeof window !== 'undefined' && typeof window.acquireVsCodeApi === 'function') {
       try {
         this.vscodeApi = window.acquireVsCodeApi();
@@ -32,14 +38,21 @@ export class VSCodeHostAdapter {
     }
   }
 
+  setAllowedOrigins(origins: string[]): void {
+    this.allowedOrigins = [...origins];
+  }
+
   get isEmbedded(): boolean {
     if (typeof window === 'undefined') return false;
     const urlParams = new URLSearchParams(window.location.search);
     return Boolean(this.vscodeApi || urlParams.get('embed') === 'true' || window.parent !== window);
   }
 
-  attachSession(session: GroupChatSession): () => void {
+  attachSession(session: GroupChatSession, options: VSCodeHostOptions = {}): () => void {
     this.session = session;
+    if (options.allowedOrigins) {
+      this.allowedOrigins = options.allowedOrigins;
+    }
 
     // Send state updates to host
     this.unsubStateChange = session.on('stateChange', (conv) => {
@@ -54,10 +67,18 @@ export class VSCodeHostAdapter {
       });
     });
 
-    // Listen for incoming messages from host
+    // Listen for incoming messages from host with strict origin validation
     this.messageListener = (event: MessageEvent) => {
+      // Safety: Origin validation - do not accept control messages from arbitrary untrusted origins
+      if (this.allowedOrigins && this.allowedOrigins.length > 0) {
+        if (!event.origin || !this.allowedOrigins.includes(event.origin)) {
+          console.warn(`[VSCodeHostAdapter] Rejected postMessage from untrusted origin: ${event.origin}`);
+          return;
+        }
+      }
+
       const msg = event.data as HostToRoundtableMessage;
-      if (!msg || !msg.type || !msg.type.startsWith('ROUNDTABLE_')) return;
+      if (!msg || typeof msg !== 'object' || !msg.type || !msg.type.startsWith('ROUNDTABLE_')) return;
 
       this.handleHostMessage(msg);
     };

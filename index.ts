@@ -1,16 +1,23 @@
 /**
  * Roundtable - Multi-Agent Group Chat & Deliberation Engine
- * Main pluggable library entry point.
+ * Headless TypeScript library entry point.
+ * 
+ * Provides stable, documented interfaces for agents, providers,
+ * moderation, orchestration, events, and persistence.
+ * Completely usable independently of any UI or browser environment.
  */
 
-// Core Engine & Orchestrator
+// Core Engine, Types & Orchestration
 export * from './packages/core/index.ts';
 
-// Provider Adapters (Ollama, LM Studio, OpenAI, Claude, Gemini, Mock)
+// Provider Adapters & Registry (Ollama, LM Studio, OpenAI, Claude, Gemini, Mock)
 export * from './packages/providers/index.ts';
 
-// Storage Adapters & Export
+// Storage Adapters, Persistence & Safe Export
 export * from './packages/storage/index.ts';
 
-// Embeddable React Components & Hooks
-export * from './packages/ui-react/index.ts';
+// Tool Registry & Safe Execution Engine
+export * from './packages/tools/index.ts';
+
+// Embed Host & IDE Webview Adapter
+export * from './packages/embed/index.ts';
