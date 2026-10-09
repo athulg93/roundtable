@@ -129,6 +129,18 @@ export class LocalStorageAdapter implements StorageAdapter {
     return this.fallbackMemory.listGroups();
   }
 
+  async deleteGroup(id: string): Promise<void> {
+    await this.fallbackMemory.deleteGroup(id);
+    if (!this.isAvailable()) return;
+    try {
+      window.localStorage.removeItem(PREFIX + `group_${id}`);
+      const ids = this.getItem<string[]>('group_ids') || [];
+      this.setItem('group_ids', ids.filter((x) => x !== id));
+    } catch (e) {
+      console.warn('LocalStorage deleteGroup error:', e);
+    }
+  }
+
   async saveAgent(agent: Agent): Promise<void> {
     await this.fallbackMemory.saveAgent(agent);
     if (!this.isAvailable()) return;
@@ -160,5 +172,17 @@ export class LocalStorageAdapter implements StorageAdapter {
       if (list.length > 0) return list;
     }
     return this.fallbackMemory.listAgents();
+  }
+
+  async deleteAgent(id: string): Promise<void> {
+    await this.fallbackMemory.deleteAgent(id);
+    if (!this.isAvailable()) return;
+    try {
+      window.localStorage.removeItem(PREFIX + `agent_${id}`);
+      const ids = this.getItem<string[]>('agent_ids') || [];
+      this.setItem('agent_ids', ids.filter((x) => x !== id));
+    } catch (e) {
+      console.warn('LocalStorage deleteAgent error:', e);
+    }
   }
 }

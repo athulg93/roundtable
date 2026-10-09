@@ -59,6 +59,10 @@ export class MemoryStorageAdapter implements StorageAdapter {
     return Array.from(this.groups.values());
   }
 
+  async deleteGroup(id: string): Promise<void> {
+    this.groups.delete(id);
+  }
+
   async saveAgent(agent: Agent): Promise<void> {
     this.agents.set(agent.id, { ...agent });
   }
@@ -70,5 +74,9 @@ export class MemoryStorageAdapter implements StorageAdapter {
 
   async listAgents(): Promise<Agent[]> {
     return Array.from(this.agents.values());
+  }
+
+  async deleteAgent(id: string): Promise<void> {
+    this.agents.delete(id);
   }
 }

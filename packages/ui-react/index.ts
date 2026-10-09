@@ -12,4 +12,8 @@ export * from './BranchTreeVisualizer.tsx';
 export * from './DissentLogView.tsx';
 export * from './ToolsView.tsx';
 export * from './TemplateGalleryModal.tsx';
+export * from './GroupsView.tsx';
+export * from './AgentsView.tsx';
+export * from './SettingsView.tsx';
+export * from './sessionCredentials.ts';
 export * from './speechSynthesis.ts';

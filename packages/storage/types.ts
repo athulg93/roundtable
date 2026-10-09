@@ -24,7 +24,9 @@ export interface StorageAdapter {
   saveGroup(group: Group): Promise<void>;
   getGroup(id: string): Promise<Group | null>;
   listGroups(): Promise<Group[]>;
+  deleteGroup(id: string): Promise<void>;
   saveAgent(agent: Agent): Promise<void>;
   getAgent(id: string): Promise<Agent | null>;
   listAgents(): Promise<Agent[]>;
+  deleteAgent(id: string): Promise<void>;
 }
