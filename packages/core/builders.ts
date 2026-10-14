@@ -26,6 +26,9 @@ export interface CreateAgentOptions {
   name: string;
   provider?: string; // 'mock' | 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini' | string
   model: string;
+  fallbackProvider?: string;
+  fallbackModel?: string;
+  providerConfigId?: string;
   role?: AgentRole; // 'participant' | 'moderator', defaults to 'participant'
   rolePrompt?: string; // OPTIONAL: what role the agent is supposed to do
   temperature?: number;
@@ -55,6 +58,9 @@ export function createAgent(options: CreateAgentOptions): Agent {
     role,
     provider: options.provider || 'mock',
     model: options.model,
+    fallbackProvider: options.fallbackProvider,
+    fallbackModel: options.fallbackModel,
+    providerConfigId: options.providerConfigId,
     rolePrompt: options.rolePrompt,
     temperature: options.temperature ?? (role === 'moderator' ? 0.2 : 0.7),
     maxOutputTokens: options.maxOutputTokens ?? 1024,
@@ -74,7 +80,7 @@ export interface CreateGroupOptions {
   id?: string;
   name: string;
   goal: string;
-  agentIds: string[];
+  agentIds?: string[];
   moderatorId?: string;
   speakerPolicy?: SpeakerSelectionPolicy;
   terminationPolicy?: TerminationPolicy;
@@ -88,13 +94,14 @@ export interface CreateGroupOptions {
  */
 export function createGroup(options: CreateGroupOptions): Group {
   const id = options.id || `grp-${Math.random().toString(36).substring(2, 9)}`;
-  const moderatorId = options.moderatorId || options.agentIds[0];
+  const agentIds = options.agentIds || [];
+  const moderatorId = options.moderatorId || (agentIds.length > 0 ? agentIds[0] : 'user');
 
   return {
     id,
     name: options.name,
     goal: options.goal,
-    agentIds: options.agentIds,
+    agentIds,
     moderatorId,
     speakerPolicy: options.speakerPolicy || 'moderator-directed',
     terminationPolicy: options.terminationPolicy || 'moderator-conclusion',
@@ -105,6 +112,7 @@ export function createGroup(options: CreateGroupOptions): Group {
     updatedAt: Date.now(),
   };
 }
+
 
 export interface QuickSessionOptions {
   topic: string;

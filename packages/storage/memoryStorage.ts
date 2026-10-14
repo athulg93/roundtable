@@ -1,16 +1,18 @@
 /**
- * In-Memory Storage Adapter (P1.9)
- * Used for automated test suites and isolated runtimes.
+ * In-Memory Storage Adapter (P1.9, Phase 2 Dependability)
+ * Used for automated test suites, headless scripts, and isolated runtimes.
  */
 
 import { StorageAdapter, ConversationSummaryItem } from './types.ts';
 import { Agent, Conversation, ConversationEvent, Group } from '../core/types.ts';
+import { ProviderConfig } from '../providers/types.ts';
 
 export class MemoryStorageAdapter implements StorageAdapter {
   private eventsByConversation = new Map<string, ConversationEvent[]>();
   private conversations = new Map<string, Conversation>();
   private groups = new Map<string, Group>();
   private agents = new Map<string, Agent>();
+  private providerConfigs = new Map<string, ProviderConfig>();
 
   async appendEvent(event: ConversationEvent): Promise<void> {
     if (!event || !event.conversationId) {
@@ -78,5 +80,28 @@ export class MemoryStorageAdapter implements StorageAdapter {
 
   async deleteAgent(id: string): Promise<void> {
     this.agents.delete(id);
+  }
+
+  // --- Provider Configuration Persistence ---
+
+  async saveProviderConfig(config: ProviderConfig): Promise<void> {
+    this.providerConfigs.set(config.id, {
+      ...config,
+      updatedAt: Date.now(),
+      createdAt: config.createdAt || Date.now(),
+    });
+  }
+
+  async getProviderConfig(id: string): Promise<ProviderConfig | null> {
+    const found = this.providerConfigs.get(id);
+    return found ? { ...found } : null;
+  }
+
+  async listProviderConfigs(): Promise<ProviderConfig[]> {
+    return Array.from(this.providerConfigs.values());
+  }
+
+  async deleteProviderConfig(id: string): Promise<void> {
+    this.providerConfigs.delete(id);
   }
 }

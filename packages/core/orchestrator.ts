@@ -453,7 +453,7 @@ export class GroupChatSession {
         }
       }, totalTimeoutMs);
 
-      const adapter = this.providers.require(agent.provider);
+      const adapter = this.providers.resolve(agent.provider, agent.model);
       const generator = adapter.generate(
         {
           model: agent.model,
@@ -604,7 +604,26 @@ export class GroupChatSession {
         return this.executeTurnWithRecovery(agent, context, turnId, retryCount + 1);
       }
 
+      // Check for agent-configured fallback provider on non-retryable failure or exhausted retries
+      if (agent.fallbackProvider && retryCount < maxRetries) {
+        try {
+          const fallbackAgent: Agent = {
+            ...agent,
+            provider: agent.fallbackProvider,
+            model: agent.fallbackModel || agent.model,
+            fallbackProvider: undefined, // prevent recursive loops
+          };
+          const fallbackAdapter = this.providers.resolve(fallbackAgent.provider, fallbackAgent.model);
+          if (fallbackAdapter.id !== agent.provider) {
+            return await this.executeTurnWithRecovery(fallbackAgent, context, turnId, retryCount + 1);
+          }
+        } catch {
+          // Fallback provider attempt failed, proceed with standard failure handling
+        }
+      }
+
       // If consecutive failures reach participant count, pause cleanly
+
       const participantCount = Object.values(this.state.agentSnapshots).filter((a) => a.role === 'participant').length;
       const shouldPause = this.consecutiveFailures >= participantCount;
 
@@ -631,7 +650,7 @@ export class GroupChatSession {
   // --- Context Compression Helper ---
 
   private async compressOlderTurns(turnsToCompress: Turn[]): Promise<void> {
-    const adapter = this.providers.get('mock') || this.providers.require('mock');
+    const adapter = this.providers.resolve('mock', this.summarizerModel);
     const rollingText = await generateRollingSummary(
       turnsToCompress,
       this.state.summaries.rollingSummary,
@@ -667,7 +686,7 @@ export class GroupChatSession {
     }
 
     const moderatorAgent = this.state.agentSnapshots[moderatorId] || participants[0];
-    const adapter = this.providers.require(moderatorAgent.provider);
+    const adapter = this.providers.resolve(moderatorAgent.provider, moderatorAgent.model);
 
     const prompt = buildModeratorPrompt(this.state, participants);
     let rawOutput = '';
@@ -728,7 +747,7 @@ export class GroupChatSession {
     return this.queue.execute(async () => {
       const moderatorId = this.state.groupSnapshot.moderatorId;
       const agent = this.state.agentSnapshots[moderatorId] || Object.values(this.state.agentSnapshots)[0];
-      const adapter = this.providers.require(agent.provider);
+      const adapter = this.providers.resolve(agent.provider, agent.model);
 
       const nextStepsRes = await generateNextStepsSummary(this.state, adapter, agent.model);
       await this.appendEvent({

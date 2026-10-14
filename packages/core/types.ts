@@ -22,6 +22,9 @@ export interface Agent {
   role: AgentRole;
   provider: string; // 'mock' | 'openai-compatible' | 'anthropic' | 'gemini' | custom
   model: string;
+  fallbackProvider?: string; // fallback provider ID or preset (e.g. 'gemini', 'mock')
+  fallbackModel?: string; // fallback model to use when fallback provider is activated
+  providerConfigId?: string; // optional reference to a stored ProviderConfig
   rolePrompt?: string; // system prompt defining expertise & perspective (optional)
   temperature: number;
   maxOutputTokens: number;
@@ -31,6 +34,7 @@ export interface Agent {
   modelMetadata?: Record<string, unknown>;
   createdAt?: number;
 }
+
 
 export type SpeakerSelectionPolicy = 'manual' | 'round-robin' | 'moderator-directed';
 export type TerminationPolicy = 'manual' | 'max-rounds' | 'token-budget' | 'moderator-conclusion';

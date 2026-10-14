@@ -59,3 +59,15 @@ export function createConfiguredAdapter(
       });
   }
 }
+
+export function createFromConfig(
+  config: import('./types.ts').ProviderConfig,
+  apiKey?: string
+): ProviderAdapter {
+  return createConfiguredAdapter(config.id, config.type, {
+    baseUrl: config.baseUrl,
+    apiKey,
+    name: config.name,
+  });
+}
+

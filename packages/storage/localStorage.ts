@@ -185,4 +185,52 @@ export class LocalStorageAdapter implements StorageAdapter {
       console.warn('LocalStorage deleteAgent error:', e);
     }
   }
+
+  // --- Provider Configuration Persistence ---
+
+  async saveProviderConfig(config: import('../providers/types.ts').ProviderConfig): Promise<void> {
+    await this.fallbackMemory.saveProviderConfig(config);
+    if (!this.isAvailable()) return;
+
+    this.setItem(`prov_${config.id}`, config);
+    const ids = this.getItem<string[]>('provider_config_ids') || [];
+    if (!ids.includes(config.id)) {
+      ids.push(config.id);
+      this.setItem('provider_config_ids', ids);
+    }
+  }
+
+  async getProviderConfig(id: string): Promise<import('../providers/types.ts').ProviderConfig | null> {
+    if (this.isAvailable()) {
+      const p = this.getItem<import('../providers/types.ts').ProviderConfig>(`prov_${id}`);
+      if (p) return p;
+    }
+    return this.fallbackMemory.getProviderConfig(id);
+  }
+
+  async listProviderConfigs(): Promise<import('../providers/types.ts').ProviderConfig[]> {
+    if (this.isAvailable()) {
+      const ids = this.getItem<string[]>('provider_config_ids') || [];
+      const list: import('../providers/types.ts').ProviderConfig[] = [];
+      for (const id of ids) {
+        const p = this.getItem<import('../providers/types.ts').ProviderConfig>(`prov_${id}`);
+        if (p) list.push(p);
+      }
+      if (list.length > 0) return list;
+    }
+    return this.fallbackMemory.listProviderConfigs();
+  }
+
+  async deleteProviderConfig(id: string): Promise<void> {
+    await this.fallbackMemory.deleteProviderConfig(id);
+    if (!this.isAvailable()) return;
+    try {
+      window.localStorage.removeItem(PREFIX + `prov_${id}`);
+      const ids = this.getItem<string[]>('provider_config_ids') || [];
+      this.setItem('provider_config_ids', ids.filter((x) => x !== id));
+    } catch (e) {
+      console.warn('LocalStorage deleteProviderConfig error:', e);
+    }
+  }
 }
+

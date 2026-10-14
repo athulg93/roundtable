@@ -142,9 +142,15 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
 
   const storage = React.useMemo(() => new LocalStorageAdapter(), []);
 
-  // Initial load of groups and agents from storage
+  // Initial load of groups, agents, and provider configs from storage
   useEffect(() => {
     const loadData = async () => {
+      // Restore non-secret provider configurations
+      const savedProvConfigs = await storage.listProviderConfigs();
+      for (const pConfig of savedProvConfigs) {
+        defaultProviderRegistry.registerConfig(pConfig);
+      }
+
       let loadedGroups = await storage.listGroups();
       let loadedAgents = await storage.listAgents();
 
@@ -176,6 +182,18 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
   ) => {
     if (creds) {
       sessionCredentials.setAgentCredentials(agent.id, creds);
+      if (creds.baseUrl || creds.providerType) {
+        const provConfig = {
+          id: `prov-config-${agent.id}`,
+          name: `${agent.name} Config`,
+          type: creds.providerType || 'openai-compatible',
+          baseUrl: creds.baseUrl,
+          defaultModel: agent.model,
+          updatedAt: Date.now(),
+        };
+        await storage.saveProviderConfig(provConfig);
+        defaultProviderRegistry.registerConfig(provConfig, creds.apiKey);
+      }
     }
     await storage.saveAgent(agent);
     const updated = await storage.listAgents();
@@ -185,10 +203,13 @@ export const GroupChat: React.FC<GroupChatProps> = ({ initialSession }) => {
   // Handle deleting an agent
   const handleDeleteAgent = async (agentId: string) => {
     sessionCredentials.removeAgentCredentials(agentId);
+    await storage.deleteProviderConfig(`prov-config-${agentId}`);
+    defaultProviderRegistry.deleteConfig(`prov-config-${agentId}`);
     await storage.deleteAgent(agentId);
     const updated = await storage.listAgents();
     setAgents(updated);
   };
+
 
   // Handle saving a group
   const handleSaveGroup = async (group: Group) => {
